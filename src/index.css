@@ -1,0 +1,114 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Tutur — High-Tech / AI-First dark theme (default) */
+    --background: 240 24% 4%;
+    --foreground: 210 40% 98%;
+
+    --card: 240 20% 7%;
+    --card-foreground: 210 40% 98%;
+
+    --primary: 187 100% 50%; /* neon cyan */
+    --primary-foreground: 240 30% 6%;
+
+    --secondary: 270 95% 65%; /* neon purple */
+    --secondary-foreground: 240 30% 6%;
+
+    --muted: 240 12% 14%;
+    --muted-foreground: 240 8% 62%;
+
+    --accent: 270 95% 65%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 240 14% 16%;
+    --input: 240 14% 16%;
+    --ring: 187 100% 50%;
+
+    --radius: 0.9rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body,
+  #root {
+    @apply h-full;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    -webkit-tap-highlight-color: transparent;
+    /* Ambient neon depth */
+    background-image:
+      radial-gradient(60% 50% at 50% 0%, hsl(187 100% 50% / 0.10), transparent 70%),
+      radial-gradient(50% 50% at 100% 100%, hsl(270 95% 65% / 0.12), transparent 70%),
+      radial-gradient(40% 40% at 0% 80%, hsl(187 100% 50% / 0.06), transparent 70%);
+    background-attachment: fixed;
+  }
+}
+
+@layer components {
+  /* Frosted-glass surface used for inputs and panels */
+  .glass {
+    @apply border border-white/10 bg-white/[0.04] backdrop-blur-xl;
+    box-shadow: inset 0 1px 0 0 hsl(0 0% 100% / 0.06);
+  }
+
+  .glass-strong {
+    @apply border border-white/10 bg-white/[0.06] backdrop-blur-2xl;
+    box-shadow:
+      inset 0 1px 0 0 hsl(0 0% 100% / 0.08),
+      0 10px 40px -12px hsl(240 60% 2% / 0.8);
+  }
+
+  /* Gradient neon text */
+  .text-gradient {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(
+      100deg,
+      hsl(187 100% 70%),
+      hsl(270 95% 75%)
+    );
+  }
+
+  /* Shimmering sweep overlay (used on the CTA) */
+  .shimmer-overlay {
+    position: relative;
+    overflow: hidden;
+  }
+  .shimmer-overlay::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      110deg,
+      transparent 30%,
+      hsl(0 0% 100% / 0.28) 50%,
+      transparent 70%
+    );
+    background-size: 200% 100%;
+    @apply animate-shimmer;
+    pointer-events: none;
+  }
+}
+
+/* Custom slim scrollbar to match the dark aesthetic */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(240 14% 22%);
+  border-radius: 9999px;
+}
