@@ -78,7 +78,7 @@ export default function RoutineSelection({
               Kembali
             </button>
             <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Langkah 2 / 2
+              Langkah 2 / 3
             </span>
           </div>
 

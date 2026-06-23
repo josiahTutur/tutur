@@ -21,6 +21,9 @@ import {
 import { cn } from "@/lib/utils"
 import type { Profile } from "@/lib/types"
 import ActivityLibrary from "@/components/ActivityLibrary"
+import ProfileView from "@/components/ProfileView"
+import SettingsView from "@/components/SettingsView"
+import { GOALS } from "@/lib/goals"
 
 /* ========================================================================== *
  *  DashboardHub — Part 4: Generative Chat Hub & Classic Dashboard Toggle
@@ -54,16 +57,24 @@ const CYAN = "187 100% 50%" // Maya's AI identity halo
 
 // "classic" (Papan Pemuka Klasik) has no nav entry — it's reached via the
 // "Your Activities" button. "aac" is the AAC Board nav destination.
-type NavId = "ai" | "aktiviti" | "aac" | "notification" | "setting" | "classic"
+type NavId =
+  | "ai"
+  | "aktiviti"
+  | "aac"
+  | "notification"
+  | "setting"
+  | "classic"
+  | "profile"
 
 // Page titles shown in the persistent top navigation bar.
 const VIEW_TITLES: Record<NavId, string> = {
   ai: "Panduan AI Tutur",
   aktiviti: "Pustaka Aktiviti",
   aac: "Papan AAC",
-  classic: "Papan Pemuka Klasik",
+  classic: "Matlamat Anda",
   notification: "Notifikasi",
   setting: "Tetapan",
+  profile: "Profil",
 }
 
 const NAV_ITEMS = [
@@ -82,26 +93,6 @@ const NAV_ITEMS = [
 /*  Static placeholder content (pre-backend)                                  */
 /* -------------------------------------------------------------------------- */
 
-/** The 10 core developmental goals tracked in the classic view. */
-interface Goal {
-  title: string
-  done?: boolean
-  active?: boolean
-}
-
-const CORE_GOALS: Goal[] = [
-  { title: "Bina Kosa Kata", done: true },
-  { title: "Meniru Bunyi Haiwan", active: true },
-  { title: "Hubungan Mata (Eye Gaze)", done: true },
-  { title: "Isyarat Tangan Asas", done: true },
-  { title: "Sebutan Dua Suku Kata" },
-  { title: "Mengikut Arahan Mudah" },
-  { title: "Menamakan Objek Harian" },
-  { title: "Gabungan Dua Perkataan" },
-  { title: "Menjawab Soalan 'Apa'" },
-  { title: "Bercerita Mudah Mengikut Urutan" },
-]
-
 const VIDEO_LIBRARY = [
   { title: "Meniru Bunyi Haiwan", meta: "3 min • Vokalisasi", tag: "Hari 4" },
   { title: "Permainan Cermin", meta: "4 min • Ekspresi", tag: "Baharu" },
@@ -113,13 +104,37 @@ const VIDEO_LIBRARY = [
 /*  Component                                                                  */
 /* -------------------------------------------------------------------------- */
 
+/** Fallback used when the parent reaches the hub without onboarding data. */
+const FALLBACK_PROFILE: Profile = {
+  childName: "",
+  childAge: "",
+  guardianName: "",
+  relationship: "",
+  guardianAge: "",
+  stage: 1,
+  email: "",
+  profiledAt: "",
+}
+
 export default function DashboardHub({
   profile,
   routines = [],
+  activities = [],
+  onUpdateProfile,
+  onUpdateRoutines,
+  onSignOut,
 }: {
   profile?: Profile
   /** Routine codes (R1–R10) the parent selected during onboarding. */
   routines?: string[]
+  /** Activity codes (A1…) the parent curated during onboarding. */
+  activities?: string[]
+  /** Persists profile edits (from the profile page) and stage overrides. */
+  onUpdateProfile?: (profile: Profile) => void
+  /** Persists daily-routine changes made from Tetapan. */
+  onUpdateRoutines?: (routines: string[]) => void
+  /** Clears the session and returns to the start of the flow. */
+  onSignOut?: () => void
 }) {
   const [activeNav, setActiveNav] = useState<NavId>("ai")
   const [menuOpen, setMenuOpen] = useState(false) // mobile drawer
@@ -130,6 +145,16 @@ export default function DashboardHub({
   function select(id: NavId) {
     setActiveNav(id)
     setMenuOpen(false)
+  }
+
+  // Merge a partial change into the profile, seeding from a blank one if the
+  // parent arrived without onboarding data.
+  function updateProfile(next: Profile) {
+    onUpdateProfile?.(next)
+  }
+
+  function updateStage(stage: number) {
+    onUpdateProfile?.({ ...(profile ?? FALLBACK_PROFILE), stage })
   }
 
   const nav = (
@@ -186,7 +211,11 @@ export default function DashboardHub({
           </ViewLayer>
 
           <ViewLayer visible={activeNav === "aktiviti"}>
-            <ActivityLibrary childStage={profile?.stage} routines={routines} />
+            <ActivityLibrary
+              childStage={profile?.stage}
+              routines={routines}
+              activityCodes={activities}
+            />
           </ViewLayer>
 
           <ViewLayer visible={activeNav === "aac"}>
@@ -205,9 +234,20 @@ export default function DashboardHub({
           </ViewLayer>
 
           <ViewLayer visible={activeNav === "setting"}>
-            <PlaceholderView
-              icon={Settings}
-              message="Tetapan profil, bahasa dan pemberitahuan akan tersedia di sini tidak lama lagi."
+            <SettingsView
+              stage={profile?.stage}
+              profiledAt={profile?.profiledAt}
+              onStageChange={updateStage}
+              routines={routines}
+              onRoutinesChange={(r) => onUpdateRoutines?.(r)}
+            />
+          </ViewLayer>
+
+          <ViewLayer visible={activeNav === "profile"}>
+            <ProfileView
+              profile={profile}
+              onSave={updateProfile}
+              onSignOut={() => onSignOut?.()}
             />
           </ViewLayer>
         </div>
@@ -255,6 +295,7 @@ function NavRail({
   relationship: string
 }) {
   const activitiesActive = activeNav === "classic"
+  const profileActive = activeNav === "profile"
   return (
     <div className="flex h-full flex-col px-4 py-5">
       {/* Logo */}
@@ -323,26 +364,41 @@ function NavRail({
           className="h-5 w-5 shrink-0"
           style={activitiesActive ? { color: `hsl(${CORAL})` } : undefined}
         />
-        Your Activities
+        Matlamat Anda
       </button>
 
-      {/* User profile + settings */}
-      <div className="mt-4 flex items-center gap-3 border-t border-border/60 pt-4">
-        <div
-          className="relative h-10 w-10 shrink-0 rounded-full p-[2px]"
-          style={{
-            background: `linear-gradient(135deg, hsl(${CORAL}), hsl(25 95% 58%))`,
-            boxShadow: `0 0 16px -2px hsl(${CORAL} / 0.65)`,
-          }}
+      {/* User profile — opens the editable profile page */}
+      <div className="mt-4 border-t border-border/60 pt-4">
+        <button
+          type="button"
+          onClick={() => onSelect("profile")}
+          aria-current={profileActive ? "page" : undefined}
+          className={cn(
+            "flex w-full items-center gap-3 rounded-2xl p-2 text-left transition-all",
+            profileActive ? "bg-white/[0.06]" : "hover:bg-white/5"
+          )}
+          style={
+            profileActive
+              ? { boxShadow: `inset 0 0 0 1px hsl(${CORAL} / 0.4)` }
+              : undefined
+          }
         >
-          <span className="flex h-full w-full items-center justify-center rounded-full bg-background text-sm font-bold text-foreground/90">
-            <User className="h-4 w-4" />
-          </span>
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">{guardianName}</p>
-          <p className="truncate text-xs text-muted-foreground">{relationship}</p>
-        </div>
+          <div
+            className="relative h-10 w-10 shrink-0 rounded-full p-[2px]"
+            style={{
+              background: `linear-gradient(135deg, hsl(${CORAL}), hsl(25 95% 58%))`,
+              boxShadow: `0 0 16px -2px hsl(${CORAL} / 0.65)`,
+            }}
+          >
+            <span className="flex h-full w-full items-center justify-center rounded-full bg-background text-sm font-bold text-foreground/90">
+              <User className="h-4 w-4" />
+            </span>
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold">{guardianName}</p>
+            <p className="truncate text-xs text-muted-foreground">{relationship}</p>
+          </div>
+        </button>
       </div>
     </div>
   )
@@ -614,119 +670,76 @@ function VideoProgressCard() {
 /*  Board — Classic Dashboard (30-day grid · 10 goals · video library)        */
 /* -------------------------------------------------------------------------- */
 
-const CURRENT_DAY = 4
-
 function ClassicDashboard() {
   return (
     <div className="h-full overflow-y-auto px-4 pb-10 pt-5 md:px-8 md:pt-6">
       <div className="mx-auto max-w-3xl space-y-8">
         <p className="text-sm text-muted-foreground">
-          Pantau kemajuan 30 hari, matlamat teras dan pustaka video anak anda.
+          Matlamat perkembangan dan pustaka video anak anda.
         </p>
 
-        {/* 30-day grid calendar */}
-        <section className="rounded-3xl glass-strong p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-sm font-semibold tracking-tight">
-              Kemajuan 30 Hari
-            </h2>
-            <span
-              className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
-              style={{ background: `hsl(${TEAL} / 0.16)`, color: `hsl(${TEAL})` }}
-            >
-              Hari {CURRENT_DAY} / 30
-            </span>
-          </div>
-          <div className="grid grid-cols-6 gap-2 sm:grid-cols-10">
-            {Array.from({ length: 30 }, (_, i) => {
-              const day = i + 1
-              const done = day < CURRENT_DAY
-              const active = day === CURRENT_DAY
-              return (
-                <div
-                  key={day}
-                  className={cn(
-                    "flex aspect-square items-center justify-center rounded-xl text-xs font-semibold transition-colors",
-                    done && "text-background",
-                    active && "text-foreground",
-                    !done && !active && "bg-white/[0.04] text-muted-foreground"
-                  )}
-                  style={
-                    done
-                      ? { background: `hsl(${TEAL})` }
-                      : active
-                        ? {
-                            background: `hsl(${CORAL} / 0.18)`,
-                            boxShadow: `inset 0 0 0 1.5px hsl(${CORAL})`,
-                          }
-                        : undefined
-                  }
-                  aria-label={`Hari ${day}${done ? " (selesai)" : active ? " (hari ini)" : ""}`}
-                >
-                  {done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : day}
-                </div>
-              )
-            })}
-          </div>
-        </section>
-
-        {/* 10 core developmental goals */}
+        {/* 10 parent-aspiration goals (shared with the onboarding picker) */}
         <section>
           <h2 className="mb-3 px-1 text-sm font-semibold tracking-tight">
             10 Matlamat Perkembangan Teras
           </h2>
           <ul className="space-y-2">
-            {CORE_GOALS.map((goal, i) => (
-              <li
-                key={goal.title}
-                className="flex items-center gap-3 rounded-2xl glass px-4 py-3"
-              >
-                <span
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-sm font-bold"
-                  style={
-                    goal.done
-                      ? { background: `hsl(${TEAL} / 0.18)`, color: `hsl(${TEAL})` }
-                      : goal.active
-                        ? {
-                            background: `hsl(${CORAL} / 0.18)`,
-                            color: `hsl(${CORAL})`,
-                          }
-                        : { background: "hsl(0 0% 100% / 0.05)" }
-                  }
+            {GOALS.map((goal, i) => {
+              // Visual progress state — first few complete, the next in focus.
+              const done = i < 3
+              const active = i === 3
+              return (
+                <li
+                  key={goal.code}
+                  className="flex items-center gap-3 rounded-2xl glass px-4 py-3"
                 >
-                  {goal.done ? (
-                    <Check className="h-4 w-4" strokeWidth={3} />
-                  ) : goal.active ? (
-                    i + 1
-                  ) : (
-                    <Lock className="h-3.5 w-3.5 text-muted-foreground" />
-                  )}
-                </span>
-                <span
-                  className={cn(
-                    "flex-1 text-sm font-medium",
-                    goal.done
-                      ? "text-foreground/70"
-                      : goal.active
-                        ? "text-foreground"
-                        : "text-muted-foreground"
-                  )}
-                >
-                  {goal.title}
-                </span>
-                {goal.active && (
                   <span
-                    className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                    style={{
-                      background: `hsl(${CORAL} / 0.18)`,
-                      color: `hsl(${CORAL})`,
-                    }}
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-sm font-bold"
+                    style={
+                      done
+                        ? { background: `hsl(${TEAL} / 0.18)`, color: `hsl(${TEAL})` }
+                        : active
+                          ? {
+                              background: `hsl(${CORAL} / 0.18)`,
+                              color: `hsl(${CORAL})`,
+                            }
+                          : { background: "hsl(0 0% 100% / 0.05)" }
+                    }
                   >
-                    Aktif
+                    {done ? (
+                      <Check className="h-4 w-4" strokeWidth={3} />
+                    ) : active ? (
+                      i + 1
+                    ) : (
+                      <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                    )}
                   </span>
-                )}
-              </li>
-            ))}
+                  <span
+                    className={cn(
+                      "flex-1 text-sm font-medium",
+                      done
+                        ? "text-foreground/70"
+                        : active
+                          ? "text-foreground"
+                          : "text-muted-foreground"
+                    )}
+                  >
+                    {goal.aspiration}
+                  </span>
+                  {active && (
+                    <span
+                      className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                      style={{
+                        background: `hsl(${CORAL} / 0.18)`,
+                        color: `hsl(${CORAL})`,
+                      }}
+                    >
+                      Aktif
+                    </span>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         </section>
 

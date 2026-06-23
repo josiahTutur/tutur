@@ -27,6 +27,22 @@ const PURPLE_TEXT = "270 95% 84%" // lighter readable purple text
 
 const MAX_PER_DAY = 3
 
+/** Malay month names — used by the current-month progress calendar. */
+const MS_MONTHS = [
+  "Januari",
+  "Februari",
+  "Mac",
+  "April",
+  "Mei",
+  "Jun",
+  "Julai",
+  "Ogos",
+  "September",
+  "Oktober",
+  "November",
+  "Disember",
+]
+
 /** Map a numeric profile stage (1–5) to a StageCode, clamped & safe. */
 function toStageCode(stage?: number): StageCode {
   const n = Math.min(5, Math.max(1, stage ?? 1))
@@ -36,25 +52,41 @@ function toStageCode(stage?: number): StageCode {
 export default function ActivityLibrary({
   childStage,
   routines = [],
+  activityCodes = [],
 }: {
   childStage?: number
   /** Routine codes the parent selected — only these activities are shown. */
   routines?: string[]
+  /** Activity codes the parent curated during onboarding — scopes the catalogue. */
+  activityCodes?: string[]
 }) {
   const childStageCode = toStageCode(childStage)
+
+  // Current-month progress calendar — follows the real month & its day count.
+  const now = new Date()
+  const monthName = MS_MONTHS[now.getMonth()]
+  const daysInMonth = new Date(
+    now.getFullYear(),
+    now.getMonth() + 1,
+    0
+  ).getDate()
+  const currentDay = now.getDate()
 
   const [routineFilter, setRoutineFilter] = useState<string>("all")
   const [selected, setSelected] = useState<string[]>([])
   const [openCode, setOpenCode] = useState<string | null>(null)
 
-  // Activities scoped to the parent's selected routines (fall back to all if
-  // none were passed, e.g. a direct entry without onboarding).
+  // Activities scoped to the parent's curated set (if any) and selected
+  // routines. Both fall back to "no filter" when empty, e.g. a direct entry
+  // without onboarding.
   const scoped = useMemo(
     () =>
-      routines.length > 0
-        ? ACTIVITIES.filter((a) => routines.includes(a.routine))
-        : ACTIVITIES,
-    [routines]
+      ACTIVITIES.filter(
+        (a) =>
+          (activityCodes.length === 0 || activityCodes.includes(a.code)) &&
+          (routines.length === 0 || routines.includes(a.routine))
+      ),
+    [routines, activityCodes]
   )
 
   // Filter bar shows only the scoped routines that actually have activities.
@@ -89,7 +121,58 @@ export default function ActivityLibrary({
     <div className="flex h-full flex-col">
       {/* Scrollable catalogue */}
       <div className="flex-1 overflow-y-auto px-4 pb-28 pt-5 md:px-8 md:pt-6">
-        <div className="mx-auto max-w-5xl">
+        <div className="mx-auto max-w-5xl space-y-5">
+          <p className="text-sm text-muted-foreground">
+            Pantau kemajuan {daysInMonth} hari, matlamat teras dan pustaka video
+            anak anda.
+          </p>
+
+          {/* Current-month progress calendar */}
+          <section className="rounded-3xl glass-strong p-5">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-sm font-semibold tracking-tight">
+                Kemajuan {monthName}
+              </h2>
+              <span
+                className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                style={{ background: `hsl(${TEAL} / 0.16)`, color: `hsl(${TEAL})` }}
+              >
+                Hari {currentDay} / {daysInMonth}
+              </span>
+            </div>
+            <div className="grid grid-cols-6 gap-2 sm:grid-cols-10">
+              {Array.from({ length: daysInMonth }, (_, i) => {
+                const day = i + 1
+                const done = day < currentDay
+                const active = day === currentDay
+                return (
+                  <div
+                    key={day}
+                    className={cn(
+                      "flex aspect-square items-center justify-center rounded-xl text-xs font-semibold transition-colors",
+                      done && "text-background",
+                      active && "text-foreground",
+                      !done && !active && "bg-white/[0.04] text-muted-foreground"
+                    )}
+                    style={
+                      done
+                        ? { background: `hsl(${TEAL})` }
+                        : active
+                          ? {
+                              background: `hsl(${CORAL} / 0.18)`,
+                              boxShadow: `inset 0 0 0 1.5px hsl(${CORAL})`,
+                            }
+                          : undefined
+                    }
+                    aria-label={`Hari ${day}${done ? " (selesai)" : active ? " (hari ini)" : ""}`}
+                  >
+                    {done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : day}
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+
           <p className="text-sm text-muted-foreground">
             Pilih sehingga {MAX_PER_DAY} aktiviti untuk hari ini — 5 minit setiap
             satu, 15 minit jumlah dos harian.

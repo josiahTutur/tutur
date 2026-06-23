@@ -2,6 +2,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { Check, Sparkles } from "lucide-react"
+import { GOALS } from "@/lib/goals"
 
 /* ========================================================================== *
  *  GoalSelection — Part 3.5: Post-Profiling Goal Selection Matrix
@@ -18,65 +19,6 @@ import { Check, Sparkles } from "lucide-react"
 const CORAL = "12 100% 64%" // active-selection indicator
 const TEAL = "172 66% 50%" // focus-strategy badges
 const PURPLE = "270 95% 65%" // title accent glow
-
-interface Goal {
-  code: string
-  aspiration: string
-  badges: string[]
-}
-
-const GOALS: Goal[] = [
-  {
-    code: "G1",
-    aspiration: "Saya nak anak saya cakap dengan saya",
-    badges: ["TPD", "Modelling", "Parallel Talk", "Auditory Closure"],
-  },
-  {
-    code: "G2",
-    aspiration: "Saya nak anak cakap dengan kawan di sekolah",
-    badges: ["Ambil Giliran", "Parallel Talk", "Bermain"],
-  },
-  {
-    code: "G3",
-    aspiration: "Saya nak anak tak kena buli secara senyap",
-    badges: ["Komunikasi Asertif", "Expand", "Keyakinan"],
-  },
-  {
-    code: "G4",
-    aspiration: "Saya nak anak boleh minta apa yang dia nak",
-    badges: ["Auditory Closure (Tunggu)", "Beri Pilihan"],
-  },
-  {
-    code: "G5",
-    aspiration: "Saya nak anak faham apa yang saya cakap",
-    badges: ["Ayat Pendek", "4SR", "Recasting", "Ulangan"],
-  },
-  {
-    code: "G6",
-    aspiration: "Saya nak tahu perkembangan (improvement) anak saya",
-    badges: ["Ukuran 2-Jalur", "Jejak Aha Moment"],
-  },
-  {
-    code: "G7",
-    aspiration: "Saya penat. Saya tak tahu apa yang salah",
-    badges: ["Mindset Reset", "TPD", "Parallel Talk Dahulu"],
-  },
-  {
-    code: "G8",
-    aspiration: "Saya nak anak cerita apa berlaku di sekolah",
-    badges: ["Naratif", "Expand", "Komen Terbuka"],
-  },
-  {
-    code: "G9",
-    aspiration: "Saya nak terapi berkesan walau tak boleh pergi ke klinik",
-    badges: ["Laporan Carryover SLT", "Tambat Rutin"],
-  },
-  {
-    code: "G10",
-    aspiration: "Saya nak anak yakin (confident) untuk bercakap",
-    badges: ["Hargai Setiap Usaha", "Recasting", "Raikan"],
-  },
-]
 
 export default function GoalSelection({
   onComplete,

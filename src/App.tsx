@@ -6,6 +6,7 @@ import Chat from "@/components/Chat"
 import ProfilingResults from "@/components/ProfilingResults"
 import GoalSelection from "@/components/GoalSelection"
 import RoutineSelection from "@/components/RoutineSelection"
+import ActivitySelection from "@/components/ActivitySelection"
 import DashboardHub from "@/components/DashboardHub"
 import type { Profile } from "@/lib/types"
 
@@ -19,6 +20,7 @@ const DEFAULT_PROFILE: Profile = {
   guardianAge: "44 tahun",
   stage: 1,
   email: "John@gmail.com",
+  profiledAt: "2026-06-01",
 }
 
 /**
@@ -30,14 +32,15 @@ const DEFAULT_PROFILE: Profile = {
  * are needed.
  *
  * Flow:  intro ─▶ auth ─▶ [story] ─▶ chat (AI profiling) ─▶ results ─▶ goals
- *        ─▶ routines ─▶ hub
+ *        ─▶ routines ─▶ activities ─▶ hub
  *
  * The `story` onboarding narrative is shown only to brand-new registrations.
  * Returning users skip straight from auth to the chat profiling stage.
  *
  * After the communication-stage analysis (results), the parent picks a primary
- * goal (goals) and their daily routines (routines) — both anchor Maya — then
- * lands on the DashboardHub.
+ * goal (goals), their daily routines (routines), and the intervention
+ * activities (activities) — all three anchor Maya — then lands on the
+ * DashboardHub.
  */
 export type View =
   | "intro"
@@ -47,6 +50,7 @@ export type View =
   | "results"
   | "goals"
   | "routines"
+  | "activities"
   | "hub"
 
 export default function App() {
@@ -67,6 +71,10 @@ export default function App() {
   // activities the library surfaces in the hub.
   const [routines, setRoutines] = useState<string[]>([])
 
+  // Intervention activities (A1…) the parent curated during onboarding. Scopes
+  // the activity library Maya draws from in the hub.
+  const [activities, setActivities] = useState<string[]>([])
+
   // The goal/routine matrices and hub are full-bleed responsive layouts, so they
   // render outside the mobile-width column used by the rest of the onboarding flow.
   if (view === "goals") {
@@ -77,14 +85,41 @@ export default function App() {
       <RoutineSelection
         onComplete={(selected) => {
           setRoutines(selected)
-          setView("hub")
+          setView("activities")
         }}
         onBack={() => setView("goals")}
       />
     )
   }
+  if (view === "activities") {
+    return (
+      <ActivitySelection
+        childStage={profile?.stage}
+        onComplete={(selected) => {
+          setActivities(selected)
+          setView("hub")
+        }}
+        onBack={() => setView("routines")}
+      />
+    )
+  }
   if (view === "hub") {
-    return <DashboardHub profile={profile} routines={routines} />
+    return (
+      <DashboardHub
+        profile={profile}
+        routines={routines}
+        activities={activities}
+        onUpdateProfile={setProfile}
+        onUpdateRoutines={setRoutines}
+        onSignOut={() => {
+          setProfile(undefined)
+          setRoutines([])
+          setActivities([])
+          setProfilingAnswers([])
+          setView("intro")
+        }}
+      />
+    )
   }
 
   return (

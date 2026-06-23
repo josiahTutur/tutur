@@ -15,4 +15,6 @@ export interface Profile {
   /** Communication stage 1–5 from the profiling analysis. */
   stage: number
   email: string
+  /** ISO date the child was profiled at sign-up (drives the "profiled on" label). */
+  profiledAt: string
 }
