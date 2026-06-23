@@ -343,7 +343,13 @@ export default function ProfilingResults({
                 {resultStage.name}
               </span>
             </h1>
-            <span className="rounded-full glass px-3 py-1 text-xs font-medium text-muted-foreground">
+            <span
+              className="rounded-full px-3 py-1 text-xs font-semibold"
+              style={{
+                background: `hsl(${hue} 100% 55% / 0.15)`,
+                color: `hsl(${hue} 100% 82%)`,
+              }}
+            >
               {resultStage.age}
             </span>
           </div>

@@ -5,20 +5,11 @@ import {
   type FormEvent,
 } from "react"
 import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
 import { ArrowUp, Sparkles, Bot } from "lucide-react"
 
 /* -------------------------------------------------------------------------- */
 /*  Profiling content (Bahasa Malaysia)                                       */
 /* -------------------------------------------------------------------------- */
-
-const INTRO = {
-  title: "Kenali Potensi Sebenar Anak Anda 🌟",
-  description:
-    "Selamat datang ke Tutur! Setiap kanak-kanak membesar mengikut kadar tersendiri. Sila jawab beberapa soalan ringkas tentang cara anak anda berkomunikasi. Ini membantu kami menyediakan aktiviti dan tips yang paling tepat untuk perkembangan mereka.",
-  cta: "Jom Mula",
-  note: "Hanya 5 minit.",
-}
 
 // Shared Likert-scale options for the 15 assessment questions.
 const SCALE_OPTIONS = [
@@ -62,7 +53,18 @@ const QUESTIONS: Question[] = [
   {
     text: "Apakah hubungan anda dengan anak tersebut?",
     kind: "select",
-    options: ["Ibu bapa", "Datuk / Nenek", "Pengasuh", "Mak Cik / Pak Cik", "Saudara-mara"],
+    options: [
+      "Ibu",
+      "Bapa",
+      "Datuk",
+      "Nenek",
+      "Mak Cik",
+      "Pak Cik",
+      "Pengasuh",
+      "Saudara-mara",
+      "Lain-lain",
+    ],
+    placeholder: "Nyatakan hubungan anda…",
   },
   {
     text: "Berapakah umur anda?",
@@ -149,11 +151,14 @@ const QUESTIONS: Question[] = [
 
 const TYPING_DELAY = 950 // ms the typing indicator shows before a question appears
 
+// Progress is shown as 4 equal bars, each representing a block of 5 questions.
+const PROGRESS_SEGMENTS = 4
+const QUESTIONS_PER_SEGMENT = 5
+
 /* -------------------------------------------------------------------------- */
 /*  Types                                                                     */
 /* -------------------------------------------------------------------------- */
 
-type Phase = "intro" | "qa"
 type Message =
   | { role: "ai"; text: string; qIndex: number }
   | { role: "user"; text: string }
@@ -167,7 +172,6 @@ export default function Chat({
 }: {
   onComplete: (answers: string[]) => void
 }) {
-  const [phase, setPhase] = useState<Phase>("intro")
   const [messages, setMessages] = useState<Message[]>([])
   const [currentIndex, setCurrentIndex] = useState(0) // question awaiting an answer
   const [typing, setTyping] = useState(false)
@@ -178,7 +182,6 @@ export default function Chat({
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const otherInputRef = useRef<HTMLInputElement | null>(null)
   const answered = messages.filter((m) => m.role === "user").length
-  const progress = (answered / QUESTIONS.length) * 100
   const current = QUESTIONS[currentIndex]
 
   // Reveal a question with a brief "typing" indicator beforehand.
@@ -198,13 +201,13 @@ export default function Chat({
     return id
   }
 
-  // Kick off the first question when the conversation starts.
+  // Kick off the first question as soon as the chat mounts — the profiling
+  // flow lands straight on the questions (no separate intro screen).
   useEffect(() => {
-    if (phase !== "qa") return
     const id = askQuestion(0)
     return () => clearTimeout(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase])
+  }, [])
 
   // Keep the latest message in view.
   useEffect(() => {
@@ -241,53 +244,40 @@ export default function Chat({
     submitAnswer(input)
   }
 
-  /* ---------------------------- Intro screen ---------------------------- */
-  if (phase === "intro") {
-    return (
-      <main className="flex min-h-screen flex-col justify-center px-7 py-12">
-        <div
-          className="animate-scale-in rounded-3xl glass-strong p-7 text-center"
-          style={{ animationFillMode: "both" }}
-        >
-          <div className="mx-auto mb-6 flex h-16 w-16 animate-float items-center justify-center rounded-2xl glass shadow-glow-cyan">
-            <Sparkles className="h-7 w-7 text-primary" />
-          </div>
-          <h1 className="text-balance text-2xl font-bold leading-tight tracking-tight text-gradient">
-            {INTRO.title}
-          </h1>
-          <p className="mt-4 text-pretty text-sm leading-relaxed text-muted-foreground">
-            {INTRO.description}
-          </p>
-          <Button
-            size="lg"
-            onClick={() => setPhase("qa")}
-            className="shimmer-overlay mt-8 w-full animate-pulse-glow rounded-2xl text-base font-semibold"
-          >
-            {INTRO.cta}
-          </Button>
-          <p className="mt-3 text-xs text-muted-foreground">{INTRO.note}</p>
-        </div>
-      </main>
-    )
-  }
-
   /* ------------------------------ QA chat ------------------------------ */
   return (
     <main className="flex h-screen flex-col">
       {/* Progress header */}
       <header className="shrink-0 border-b border-border/60 bg-background/70 px-5 pb-3 pt-5 backdrop-blur-xl">
-        <div className="mb-2 flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2">
-            <span className="flex h-6 w-6 items-center justify-center rounded-lg glass shadow-glow-cyan">
-              <Sparkles className="h-3.5 w-3.5 text-primary" />
-            </span>
-            <span className="font-medium tracking-tight">Profil Tutur</span>
-          </div>
-          <span className="tabular-nums text-muted-foreground">
-            {answered}/{QUESTIONS.length}
+        <div className="mb-2 flex items-center gap-2 text-xs">
+          <span className="flex h-6 w-6 items-center justify-center rounded-lg glass shadow-glow-cyan">
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
           </span>
+          <span className="font-medium tracking-tight">Profil Tutur</span>
         </div>
-        <Progress value={progress} />
+
+        {/* Four segments, each tracking a block of 5 questions. A segment fills
+            completely once its 5 questions are answered. */}
+        <div className="flex items-center gap-2">
+          {Array.from({ length: PROGRESS_SEGMENTS }, (_, seg) => {
+            const fill =
+              Math.max(
+                0,
+                Math.min(1, (answered - seg * QUESTIONS_PER_SEGMENT) / QUESTIONS_PER_SEGMENT)
+              ) * 100
+            return (
+              <div
+                key={seg}
+                className="h-2 flex-1 overflow-hidden rounded-full bg-muted"
+              >
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-primary to-secondary transition-all duration-500"
+                  style={{ width: `${fill}%` }}
+                />
+              </div>
+            )
+          })}
+        </div>
       </header>
 
       {/* Conversation */}
@@ -345,9 +335,9 @@ export default function Chat({
             ].join(" ")}
           >
             {current.options?.map((opt, i) => {
-              // On the age question, "Lain-lain" opens a manual-entry field
+              // "Lain-lain" opens a manual-entry field (age & relationship)
               // instead of submitting straight away.
-              const isOtherChip = current.kind === "age" && opt === "Lain-lain"
+              const isOtherChip = opt === "Lain-lain"
               const selected = isOtherChip && otherActive
               return (
                 <button

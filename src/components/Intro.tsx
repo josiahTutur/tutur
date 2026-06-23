@@ -13,7 +13,14 @@ const LINES = [
 // Delay before each line reveals (ms). The CTA appears after the last line.
 const REVEAL_INTERVAL = 1600
 
-export default function Intro({ onComplete }: { onComplete: () => void }) {
+export default function Intro({
+  onComplete,
+  onSkip,
+}: {
+  onComplete: () => void
+  /** Demo shortcut: skip sign-in/profiling and jump to the dashboard. */
+  onSkip: () => void
+}) {
   const [visibleCount, setVisibleCount] = useState(0)
 
   useEffect(() => {
@@ -26,12 +33,21 @@ export default function Intro({ onComplete }: { onComplete: () => void }) {
 
   return (
     <main className="relative flex min-h-screen flex-col px-7 pb-10 pt-16">
-      {/* Brand mark */}
-      <div className="mb-12 flex animate-fade-in items-center gap-2">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl glass-strong shadow-glow-cyan">
-          <span className="text-lg font-bold text-gradient">T</span>
+      {/* Brand mark + demo skip */}
+      <div className="mb-12 flex animate-fade-in items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl glass-strong shadow-glow-cyan">
+            <span className="text-lg font-bold text-gradient">T</span>
+          </div>
+          <span className="text-lg font-semibold tracking-tight">Tutur</span>
         </div>
-        <span className="text-lg font-semibold tracking-tight">Tutur</span>
+        <button
+          type="button"
+          onClick={onSkip}
+          className="rounded-full glass px-3.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          Langkau →
+        </button>
       </div>
 
       {/* Sequential vertical fade-up text carousel */}

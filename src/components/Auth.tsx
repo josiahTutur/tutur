@@ -153,7 +153,7 @@ export default function Auth({ onVerified }: { onVerified: () => void }) {
             <span className="font-medium text-foreground">{email}</span>
           </p>
 
-          <div className="flex justify-center gap-2.5">
+          <div className="grid grid-cols-6 gap-1.5 sm:gap-2.5">
             {otp.map((digit, i) => (
               <input
                 key={i}
@@ -166,7 +166,7 @@ export default function Auth({ onVerified }: { onVerified: () => void }) {
                 value={digit}
                 onChange={(e) => handleOtpChange(i, e.target.value)}
                 onKeyDown={(e) => handleOtpKeyDown(i, e)}
-                className="h-14 w-11 rounded-xl glass text-center text-xl font-semibold text-foreground outline-none transition-all focus:border-primary/60 focus:shadow-glow-cyan focus:ring-2 focus:ring-ring"
+                className="aspect-[3/4] w-full min-w-0 rounded-xl glass text-center text-lg font-semibold text-foreground outline-none transition-all focus:border-primary/60 focus:shadow-glow-cyan focus:ring-2 focus:ring-ring sm:text-xl"
                 aria-label={`Digit kod ${i + 1}`}
               />
             ))}
