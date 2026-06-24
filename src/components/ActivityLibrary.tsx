@@ -47,20 +47,32 @@ function toStageCode(stage?: number): StageCode {
 
 export default function ActivityLibrary({
   childStage,
+  relationship = "Ibu Bapa",
   routines = [],
   activityCodes = [],
+  onTodayCompletedChange,
 }: {
   childStage?: number
+  /** Guardian's relationship to the child (e.g. "Bapa"); labels the guidance. */
+  relationship?: string
   /** Routine codes the parent selected — only these activities are shown. */
   routines?: string[]
   /** Activity codes the parent curated during onboarding — scopes the catalogue. */
   activityCodes?: string[]
+  /** Reports today's completed-activity count up (for the shared calendar). */
+  onTodayCompletedChange?: (count: number) => void
 }) {
   const childStageCode = toStageCode(childStage)
 
   const [routineFilter, setRoutineFilter] = useState<string>("all")
   const [selected, setSelected] = useState<string[]>([])
   const [openCode, setOpenCode] = useState<string | null>(null)
+
+  // Surface today's completed count so other views (e.g. Analisis) show the
+  // same calendar state.
+  useEffect(() => {
+    onTodayCompletedChange?.(selected.length)
+  }, [selected.length, onTodayCompletedChange])
 
   // Activities scoped to the parent's curated set (if any) and selected
   // routines. Both fall back to "no filter" when empty, e.g. a direct entry
@@ -113,8 +125,8 @@ export default function ActivityLibrary({
             ini.
           </p>
 
-          {/* Current-month progress calendar — reflects actual daily completion */}
-          <ProgressCalendar />
+          {/* Current-month progress calendar — today reflects live completion */}
+          <ProgressCalendar todayCompleted={selected.length} />
 
           <p className="text-sm text-muted-foreground">
             Pilih sehingga {MAX_PER_DAY} aktiviti untuk hari ini — 5 minit setiap
@@ -193,6 +205,7 @@ export default function ActivityLibrary({
         <ActivityDetail
           activity={openActivity}
           childStage={childStageCode}
+          relationship={relationship}
           selected={selected.includes(openActivity.code)}
           canAdd={!atCap || selected.includes(openActivity.code)}
           onToggle={() => toggleSelect(openActivity.code)}
@@ -309,6 +322,7 @@ function ActivityCard({
 function ActivityDetail({
   activity,
   childStage,
+  relationship,
   selected,
   canAdd,
   onToggle,
@@ -316,6 +330,8 @@ function ActivityDetail({
 }: {
   activity: Activity
   childStage: StageCode
+  /** Guardian's relationship to the child (e.g. "Bapa") — labels the guidance. */
+  relationship: string
   selected: boolean
   canAdd: boolean
   onToggle: () => void
@@ -328,28 +344,31 @@ function ActivityDetail({
 
   // Toggles the in-activity AAC practice board (scoped to this activity's words).
   const [showBoard, setShowBoard] = useState(false)
-  // Practice gate — the parent must tap every AAC word on the board before the
-  // activity can be added, confirming they practised it with the child.
-  const [practiced, setPracticed] = useState(false)
-
-  // Adding is unlocked once practised (and within the daily cap). Removing an
-  // already-added activity is always allowed.
-  const canToggle = selected || (practiced && canAdd)
+  // Practice gate — the parent must tap every AAC word before the activity can
+  // be added. An already-added activity counts as already practised, so
+  // reopening it shows the verified state (board pre-checked).
+  const [practiced, setPracticed] = useState(selected)
 
   // Brief "completed" confirmation shown after the parent taps the button,
   // before the panel closes back to the Aktiviti Harian page.
   const [completing, setCompleting] = useState(false)
-  const showDone = selected || completing
+
+  const showDone = selected || completing // already done / just completed
+  const unlocked = practiced && canAdd // practised & within the daily cap
+  const readyToComplete = !showDone && unlocked // the tappable "complete" state
 
   function handleComplete() {
-    if (selected) {
-      onToggle() // already recorded — tapping removes it from today's plan
-      return
-    }
-    if (!canToggle) return
+    if (!readyToComplete) return
     onToggle() // record into today's plan
     setCompleting(true)
     window.setTimeout(onClose, 1000) // celebrate, then return to the list
+  }
+
+  // The AAC board's "Tutup" records the activity and closes everything (board +
+  // this panel), landing the parent straight back on Aktiviti Harian.
+  function finishFromBoard() {
+    if (!selected) onToggle()
+    onClose()
   }
 
   return (
@@ -373,6 +392,8 @@ function ActivityDetail({
             activity={activity}
             onBack={() => setShowBoard(false)}
             onVerified={() => setPracticed(true)}
+            startCompleted={practiced}
+            onComplete={finishFromBoard}
           />
         ) : (
           <>
@@ -425,7 +446,7 @@ function ActivityDetail({
               </div>
               <p className="text-xs leading-relaxed text-foreground/85">
                 Sentuh simbol pada Papan AAC sambil bercakap. AAC dimodelkan, bukan
-                diuji — ibu bapa tunjuk dahulu.
+                diuji — {relationship.toLowerCase()} tunjuk dahulu.
               </p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {AAC_CORE_WORDS.map((w) => (
@@ -440,6 +461,17 @@ function ActivityDetail({
               </div>
             </div>
           )}
+
+          {/* Parent instructions */}
+          <div>
+            <h4 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <Sparkles className="h-3.5 w-3.5 text-primary" />
+              Arahan {relationship}
+            </h4>
+            <p className="rounded-2xl glass p-3 text-sm leading-relaxed text-foreground/90">
+              {content?.instructions}
+            </p>
+          </div>
 
           {/* AAC practice — gate for adding the activity */}
           <button
@@ -459,17 +491,6 @@ function ActivityDetail({
             )}
             {practiced ? "Praktik AAC selesai — buka semula" : "Praktis dengan Papan AAC"}
           </button>
-
-          {/* Parent instructions */}
-          <div>
-            <h4 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              <Sparkles className="h-3.5 w-3.5 text-primary" />
-              Arahan Ibu Bapa
-            </h4>
-            <p className="rounded-2xl glass p-3 text-sm leading-relaxed text-foreground/90">
-              {content?.instructions}
-            </p>
-          </div>
 
           {/* Dialogue script */}
           <div>
@@ -494,12 +515,13 @@ function ActivityDetail({
           <button
             type="button"
             onClick={handleComplete}
-            disabled={!canToggle || completing}
+            disabled={!readyToComplete}
             className={cn(
-              "flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-sm font-semibold transition-all active:scale-[0.99] disabled:opacity-40",
-              showDone
-                ? "glass text-foreground hover:bg-white/[0.08]"
-                : "text-background"
+              "flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-sm font-semibold transition-all active:scale-[0.99]",
+              showDone ? "glass text-foreground" : "text-background",
+              // Only dim the locked state — the completed state stays full
+              // opacity so it reads as an achievement, not a disabled button.
+              !showDone && !unlocked && "opacity-40"
             )}
             style={
               showDone
@@ -508,7 +530,7 @@ function ActivityDetail({
                     background: `hsl(${CORAL})`,
                     // Glow only when actually enabled — avoids the coral glow
                     // bleeding over the content above when disabled.
-                    boxShadow: canToggle
+                    boxShadow: readyToComplete
                       ? `0 0 24px -6px hsl(${CORAL} / 0.7)`
                       : "none",
                   }
@@ -517,14 +539,14 @@ function ActivityDetail({
             {showDone ? (
               <>
                 <Check className="h-4 w-4" strokeWidth={3} />
-                Kami dah berjaya hari ini! 🎉
+                Completed
               </>
-            ) : canToggle ? (
-              <>Klik di sini untuk selesai</>
+            ) : unlocked ? (
+              <>Completed</>
             ) : (
               <>
                 <Lock className="h-4 w-4" />
-                Klik di sini untuk selesai
+                Completed
               </>
             )}
           </button>
@@ -557,15 +579,24 @@ function ActivityAacBoardView({
   activity,
   onBack,
   onVerified,
+  startCompleted,
+  onComplete,
 }: {
   activity: Activity
   onBack: () => void
   /** Called once every word has been tapped — confirms the practice. */
   onVerified: () => void
+  /** Pre-mark every word as practised (reopening an already-done activity). */
+  startCompleted: boolean
+  /** "Tutup" — record completion and close board + panduan → Aktiviti Harian. */
+  onComplete: () => void
 }) {
   const [strip, setStrip] = useState<AacWord[]>([])
-  // Words tapped at least once — practice is verified when all are used.
-  const [used, setUsed] = useState<Set<string>>(new Set())
+  // Words tapped at least once — practice is verified when all are used. When
+  // reopening a completed activity, every word starts already checked.
+  const [used, setUsed] = useState<Set<string>>(() =>
+    startCompleted ? new Set(activity.aacWords.map((w) => w.label)) : new Set()
+  )
   const [celebrate, setCelebrate] = useState(false)
   const total = activity.aacWords.length
   const allUsed = used.size >= total
@@ -583,12 +614,14 @@ function ActivityAacBoardView({
       const next = new Set(used)
       next.add(tile.label)
       setUsed(next)
-      if (next.size >= total) {
-        onVerified()
-        setCelebrate(true)
-        window.setTimeout(() => setCelebrate(false), 1800)
-      }
+      if (next.size >= total) onVerified() // unlock the panduan's Complete button
     }
+  }
+
+  // "Tutup" celebrates, then closes the board + panduan → Aktiviti Harian.
+  function handleClose() {
+    setCelebrate(true)
+    window.setTimeout(onComplete, 1500)
   }
 
   // Speak the built phrase aloud (browser TTS), if available.
@@ -733,7 +766,25 @@ function ActivityAacBoardView({
         </div>
       </div>
 
-      {/* Quick celebration when every word has been practised */}
+      {/* Tutup — appears once every word is practised */}
+      {allUsed && (
+        <div className="shrink-0 border-t border-border/60 bg-background px-4 py-3">
+          <button
+            type="button"
+            onClick={handleClose}
+            disabled={celebrate}
+            className="flex w-full items-center justify-center rounded-2xl py-3 text-sm font-semibold text-background transition-all active:scale-[0.99] disabled:opacity-60"
+            style={{
+              background: `hsl(${PURPLE})`,
+              boxShadow: `0 0 24px -6px hsl(${PURPLE} / 0.7)`,
+            }}
+          >
+            Tutup
+          </button>
+        </div>
+      )}
+
+      {/* Celebration shown after tapping Tutup, before returning to the panduan */}
       {celebrate && (
         <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center">
           <div className="flex animate-fade-up gap-1 text-5xl" style={{ animationFillMode: "both" }}>
@@ -757,7 +808,7 @@ function ActivityAacBoardView({
               color: `hsl(${PURPLE_TEXT})`,
             }}
           >
-            Hebat! Praktik selesai 🎉
+            Kita dah berjaya hari ini! 🎉
           </p>
         </div>
       )}

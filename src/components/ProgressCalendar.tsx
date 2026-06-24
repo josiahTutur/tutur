@@ -43,7 +43,13 @@ const STATUS_PILL: Record<DayStatus, { label: string; hue: string }> = {
   future: { label: "Akan datang", hue: "0 0% 70%" },
 }
 
-export default function ProgressCalendar() {
+export default function ProgressCalendar({
+  todayCompleted,
+}: {
+  /** Live count of activities completed today; overrides the placeholder so
+   *  today's cell colour updates as the parent completes activities. */
+  todayCompleted?: number
+}) {
   const now = new Date()
   const year = now.getFullYear()
   const month = now.getMonth()
@@ -58,7 +64,12 @@ export default function ProgressCalendar() {
     const isFuture = day > currentDay
     const doneCount = isFuture
       ? 0
-      : activitiesDoneDaysAgo(isToday ? 0 : currentDay - day)
+      : isToday
+        ? Math.min(
+            todayCompleted ?? activitiesDoneDaysAgo(0),
+            DAILY_TARGET_ACTIVITIES
+          )
+        : activitiesDoneDaysAgo(currentDay - day)
 
     let status: DayStatus
     if (isFuture) status = "future"
@@ -130,19 +141,30 @@ export default function ProgressCalendar() {
           const day = i + 1
           const { status, doneCount } = infoFor(day)
           const selected = selectedDay === day
+          const isToday = status === "today"
+          // Today's fill follows its live completion count, like any other day.
+          const isFull =
+            status === "full" ||
+            (isToday && doneCount >= DAILY_TARGET_ACTIVITIES)
+          const isPartial =
+            status === "partial" ||
+            (isToday && doneCount > 0 && doneCount < DAILY_TARGET_ACTIVITIES)
 
-          let style: React.CSSProperties | undefined
-          if (status === "today") {
-            style = {
-              background: `hsl(${CORAL} / 0.18)`,
-              boxShadow: `inset 0 0 0 1.5px hsl(${CORAL})`,
-            }
-          } else if (status === "full") {
-            style = { background: `hsl(${TEAL})` }
-          } else if (status === "partial") {
-            style = { background: `hsl(${TEAL} / 0.22)`, color: `hsl(${TEAL})` }
+          const style: React.CSSProperties = {}
+          if (isFull) {
+            style.background = `hsl(${TEAL})`
+          } else if (isPartial) {
+            style.background = `hsl(${TEAL} / 0.22)`
+            style.color = `hsl(${TEAL})`
           } else if (status === "missed") {
-            style = { boxShadow: `inset 0 0 0 1px hsl(${CORAL} / 0.35)` }
+            style.boxShadow = `inset 0 0 0 1px hsl(${CORAL} / 0.35)`
+          } else if (isToday) {
+            style.background = `hsl(${CORAL} / 0.18)`
+          }
+          // Today always keeps a coral ring, layered over its completion fill.
+          if (isToday) {
+            const ring = `inset 0 0 0 1.5px hsl(${CORAL})`
+            style.boxShadow = style.boxShadow ? `${ring}, ${style.boxShadow}` : ring
           }
 
           return (
@@ -153,8 +175,8 @@ export default function ProgressCalendar() {
               aria-pressed={selected}
               className={cn(
                 "flex aspect-square items-center justify-center rounded-xl text-xs font-semibold transition-all",
-                status === "full" && "text-background",
-                status === "today" && "text-foreground",
+                isFull && "text-background",
+                isToday && !isFull && !isPartial && "text-foreground",
                 (status === "missed" || status === "future") &&
                   "bg-white/[0.04] text-muted-foreground",
                 selected && "ring-2 ring-white/70",
@@ -163,7 +185,7 @@ export default function ProgressCalendar() {
               style={style}
               aria-label={`Hari ${day}: ${doneCount}/${DAILY_TARGET_ACTIVITIES} aktiviti`}
             >
-              {status === "full" ? (
+              {isFull ? (
                 <Check className="h-3.5 w-3.5" strokeWidth={3} />
               ) : (
                 day

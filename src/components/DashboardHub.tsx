@@ -264,6 +264,9 @@ export default function DashboardHub({
 }) {
   const [activeNav, setActiveNav] = useState<NavId>("ai")
   const [menuOpen, setMenuOpen] = useState(false) // mobile drawer
+  // Activities completed today — shared so Aktiviti Harian & Analisis calendars
+  // show the same "today" state.
+  const [todayCompleted, setTodayCompleted] = useState(0)
 
   const guardianName = profile?.guardianName ?? "[Nama Penjaga]"
   const relationship = profile?.relationship ?? "Penjaga"
@@ -344,8 +347,10 @@ export default function DashboardHub({
           <ViewLayer visible={activeNav === "aktiviti"}>
             <ActivityLibrary
               childStage={profile?.stage}
+              relationship={profile?.relationship}
               routines={routines}
               activityCodes={activities}
+              onTodayCompletedChange={setTodayCompleted}
             />
           </ViewLayer>
 
@@ -358,7 +363,11 @@ export default function DashboardHub({
           </ViewLayer>
 
           <ViewLayer visible={activeNav === "analysis"}>
-            <AnalysisView profile={profile} goal={goal} />
+            <AnalysisView
+              profile={profile}
+              goal={goal}
+              todayCompleted={todayCompleted}
+            />
           </ViewLayer>
 
           <ViewLayer visible={activeNav === "notification"}>
@@ -690,11 +699,38 @@ function ChatInterface({
   const msgId = useRef(0)
   const scrollRef = useRef<HTMLDivElement>(null)
 
+  // Reveal the scripted intro one message at a time (~1s apart) so it lands like
+  // a real conversation instead of all at once: greeting → plan → activities.
+  const [revealStep, setRevealStep] = useState(0)
+  useEffect(() => {
+    const timers = [
+      window.setTimeout(() => setRevealStep(1), 500),
+      window.setTimeout(() => setRevealStep(2), 1500),
+      window.setTimeout(() => setRevealStep(3), 2500),
+    ]
+    return () => timers.forEach((t) => clearTimeout(t))
+  }, [])
+
+  // After an activity is picked, reveal its reply → video → coaching → chips one
+  // piece at a time (~0.8s apart), with a typing indicator between, so Maya
+  // looks like she's composing the response.
+  const [selStep, setSelStep] = useState(0)
+  useEffect(() => {
+    setSelStep(0)
+    if (!selectedCode) return
+    const activity = todays.find((a) => a.code === selectedCode)
+    const total = activity?.video ? 4 : 3
+    const timers = Array.from({ length: total }, (_, i) =>
+      window.setTimeout(() => setSelStep(i + 1), (i + 1) * 800)
+    )
+    return () => timers.forEach((t) => clearTimeout(t))
+  }, [selectedCode, todays])
+
   // Keep the latest message in view as the conversation grows.
   useEffect(() => {
     const el = scrollRef.current
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" })
-  }, [messages, isTyping, selectedCode])
+  }, [messages, isTyping, selectedCode, revealStep, selStep])
 
   function send(text: string) {
     const trimmed = text.trim()
@@ -736,76 +772,103 @@ function ChatInterface({
           className="mx-auto h-full max-w-2xl space-y-5 overflow-y-auto px-4 pb-36 pt-6 md:px-6"
         >
           {/* Message 1 — time-based greeting addressing the parent */}
-          <Bubble delay={0}>
-            {greeting.text},{" "}
-            <span className="font-semibold text-foreground">{guardianName}</span>
-            ! {greeting.emoji}
-          </Bubble>
+          {revealStep >= 1 && (
+            <Bubble delay={0}>
+              {greeting.text},{" "}
+              <span className="font-semibold text-foreground">{guardianName}</span>
+              ! {greeting.emoji}
+            </Bubble>
+          )}
 
           {/* Message 2 — today's plan + prompt to choose */}
-          <Bubble delay={80}>
-            Hari ini saya dah sediakan{" "}
-            <span className="font-semibold text-foreground">
-              {todays.length} aktiviti
-            </span>{" "}
-            untuk {childName}. Yang mana satu anda ingin mulakan dahulu?
-          </Bubble>
+          {revealStep >= 2 && (
+            <Bubble delay={0}>
+              Hari ini saya dah sediakan{" "}
+              <span className="font-semibold text-foreground">
+                {todays.length} aktiviti
+              </span>{" "}
+              untuk {childName}. Yang mana satu anda ingin mulakan dahulu?
+            </Bubble>
+          )}
 
           {/* Message 3 — the 3 clickable activities */}
-          <div className="space-y-2.5 pl-12">
-            {todays.map((a, i) => (
-              <ActivityChoiceCard
-                key={a.code}
-                activity={a}
-                index={i}
-                selected={a.code === selectedCode}
-                onSelect={() =>
-                  setSelectedCode(selectedCode === a.code ? null : a.code)
-                }
-              />
-            ))}
-          </div>
-
-          {/* Message 4 — response to the chosen activity (+ video, coaching) */}
-          {selected && (
-            <>
-              <Bubble delay={0}>
-                Pilihan yang bagus! Jom mulakan{" "}
-                <span className="font-semibold text-foreground">
-                  '{selected.title}'
-                </span>
-                .{" "}
-                {selected.video
-                  ? "Tonton video panduan ringkas di bawah:"
-                  : "Berikut langkah ringkas untuk anda:"}
-              </Bubble>
-
-              {selected.video && <ActivityVideoCard activity={selected} />}
-
-              <ActivityCoachingCard
-                activity={selected}
-                childStage={childStage}
-              />
-
-              <div className="flex flex-wrap gap-2 pl-12">
-                {chips.map((chip, i) => (
-                  <button
-                    key={chip}
-                    type="button"
-                    onClick={() => send(chip)}
-                    className="animate-fade-up rounded-full glass px-3.5 py-2 text-left text-xs font-medium text-foreground/85 transition-all hover:bg-white/[0.09] hover:text-foreground active:scale-[0.98]"
-                    style={{
-                      animationDelay: `${120 + i * 70}ms`,
-                      animationFillMode: "both",
-                      boxShadow: `inset 0 0 22px -16px hsl(${CORAL} / 0.9)`,
-                    }}
-                  >
-                    {chip}
-                  </button>
-                ))}
-              </div>
-            </>
+          {revealStep >= 3 && (
+            <div className="space-y-2.5 pl-12">
+              {todays.map((a, i) => (
+                <ActivityChoiceCard
+                  key={a.code}
+                  activity={a}
+                  index={i}
+                  selected={a.code === selectedCode}
+                  onSelect={() =>
+                    setSelectedCode(selectedCode === a.code ? null : a.code)
+                  }
+                />
+              ))}
+            </div>
           )}
+
+          {/* While the intro is still composing, show Maya "typing" */}
+          {revealStep < 3 && <TypingBubble />}
+
+          {/* Message 4 — response to the chosen activity, revealed piece by
+              piece (reply → video → coaching → chips) like Maya is composing */}
+          {selected &&
+            (() => {
+              const hasVideo = !!selected.video
+              const coachStep = hasVideo ? 3 : 2
+              const chipsStep = hasVideo ? 4 : 3
+              return (
+                <>
+                  {selStep >= 1 && (
+                    <Bubble delay={0}>
+                      Pilihan yang bagus! Jom mulakan{" "}
+                      <span className="font-semibold text-foreground">
+                        '{selected.title}'
+                      </span>
+                      .{" "}
+                      {hasVideo
+                        ? "Tonton video panduan ringkas di bawah:"
+                        : "Berikut langkah ringkas untuk anda:"}
+                    </Bubble>
+                  )}
+
+                  {hasVideo && selStep >= 2 && (
+                    <ActivityVideoCard activity={selected} />
+                  )}
+
+                  {selStep >= coachStep && (
+                    <ActivityCoachingCard
+                      activity={selected}
+                      childStage={childStage}
+                    />
+                  )}
+
+                  {selStep >= chipsStep && (
+                    <div className="flex flex-wrap gap-2 pl-12">
+                      {chips.map((chip, i) => (
+                        <button
+                          key={chip}
+                          type="button"
+                          onClick={() => send(chip)}
+                          className="animate-fade-up rounded-full glass px-3.5 py-2 text-left text-xs font-medium text-foreground/85 transition-all hover:bg-white/[0.09] hover:text-foreground active:scale-[0.98]"
+                          style={{
+                            animationDelay: `${120 + i * 70}ms`,
+                            animationFillMode: "both",
+                            boxShadow: `inset 0 0 22px -16px hsl(${CORAL} / 0.9)`,
+                          }}
+                        >
+                          {chip}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Still composing the rest of the response */}
+                  {selStep < chipsStep && <TypingBubble />}
+                </>
+              )
+            })()}
 
           {/* Free-form conversation */}
           {messages.map((msg) =>

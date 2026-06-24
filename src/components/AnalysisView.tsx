@@ -64,10 +64,13 @@ const WITHIN_STAGE_PCT = 60 // progress through the current stage
 export default function AnalysisView({
   profile,
   goal,
+  todayCompleted,
 }: {
   profile?: Profile
   /** Active primary goal code (G1–G10). */
   goal?: string
+  /** Live count of activities completed today (shared with Aktiviti Harian). */
+  todayCompleted?: number
 }) {
   const childName = profile?.childName?.trim() || "anak anda"
   const stage = Math.min(Math.max(profile?.stage ?? 1, 1), 5)
@@ -142,7 +145,7 @@ export default function AnalysisView({
         <SectionLabel>Konsistensi Anda</SectionLabel>
 
         {/* Daily-completion calendar — identical to the Aktiviti Harian view */}
-        <ProgressCalendar />
+        <ProgressCalendar todayCompleted={todayCompleted} />
 
         {/* Weekly intervention minutes vs target */}
         <Card
