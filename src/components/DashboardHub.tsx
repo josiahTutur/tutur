@@ -1,29 +1,35 @@
-import { useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   Bot,
   Bell,
   User,
   Settings,
-  Paperclip,
-  Mic,
   ArrowUp,
   Play,
   LayoutGrid,
   BrainCircuit,
   Menu,
-  Lock,
-  Check,
   Volume2,
   X,
-  CalendarCheck,
+  Film,
   Library,
+  BarChart3,
+  ChevronRight,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Profile } from "@/lib/types"
+import {
+  ACTIVITIES,
+  ROUTINE_LABELS,
+  STAGE_INFO,
+  STAGE_ORDER,
+  type Activity,
+  type StageCode,
+} from "@/lib/activities"
 import ActivityLibrary from "@/components/ActivityLibrary"
+import AnalysisView from "@/components/AnalysisView"
 import ProfileView from "@/components/ProfileView"
 import SettingsView from "@/components/SettingsView"
-import { GOALS } from "@/lib/goals"
 
 /* ========================================================================== *
  *  DashboardHub — Part 4: Generative Chat Hub & Classic Dashboard Toggle
@@ -61,6 +67,7 @@ type NavId =
   | "ai"
   | "aktiviti"
   | "aac"
+  | "analysis"
   | "notification"
   | "setting"
   | "classic"
@@ -69,19 +76,22 @@ type NavId =
 // Page titles shown in the persistent top navigation bar.
 const VIEW_TITLES: Record<NavId, string> = {
   ai: "Panduan AI Tutur",
-  aktiviti: "Pustaka Aktiviti",
+  aktiviti: "Aktiviti Harian",
   aac: "Papan AAC",
-  classic: "Matlamat Anda",
+  classic: "Library",
+  analysis: "Analisis",
   notification: "Notifikasi",
   setting: "Tetapan",
   profile: "Profil",
 }
 
+// "notification" has no nav entry — it's reached via the bell beside the
+// profile at the bottom of the rail.
 const NAV_ITEMS = [
   { id: "ai", label: "Panduan AI", icon: BrainCircuit },
-  { id: "aktiviti", label: "Aktiviti", icon: Library },
+  { id: "aktiviti", label: "Aktiviti Harian", icon: Library },
   { id: "aac", label: "Papan", icon: LayoutGrid },
-  { id: "notification", label: "Notifikasi", icon: Bell },
+  { id: "analysis", label: "Analisis", icon: BarChart3 },
   { id: "setting", label: "Tetapan", icon: Settings },
 ] as const satisfies ReadonlyArray<{
   id: NavId
@@ -93,12 +103,122 @@ const NAV_ITEMS = [
 /*  Static placeholder content (pre-backend)                                  */
 /* -------------------------------------------------------------------------- */
 
-const VIDEO_LIBRARY = [
-  { title: "Meniru Bunyi Haiwan", meta: "3 min • Vokalisasi", tag: "Hari 4" },
-  { title: "Permainan Cermin", meta: "4 min • Ekspresi", tag: "Baharu" },
-  { title: "Lagu Aksi Tangan", meta: "5 min • Isyarat", tag: "Popular" },
-  { title: "Masa Bercerita", meta: "6 min • Bahasa", tag: "Lanjutan" },
-] as const
+/* -------------------------------------------------------------------------- *
+ *  Video library — categorized parent-coaching videos.
+ *
+ *  Four lenses on the same coaching catalogue, so a parent can enter by
+ *  whichever frame fits them right now:
+ *    • Demo Aktiviti   — one walkthrough per activity (derived from ACTIVITIES,
+ *                        so the deck grows automatically as A4… are added).
+ *    • Teknik Terapi   — the validated strategies (S1–S5) behind the activities.
+ *    • Panduan Tahap   — a stage orientation per communication stage (T1–T5).
+ *    • Asas Papan AAC  — using the AAC board & modelling core words.
+ * -------------------------------------------------------------------------- */
+
+interface VideoItem {
+  title: string
+  meta: string
+  tag: string
+}
+
+interface VideoCategory {
+  id: string
+  label: string
+  description: string
+  hue: number // tag-badge accent (matches the AAC board palette)
+  videos: VideoItem[]
+}
+
+// One demo per activity — kept in sync with the activity catalogue.
+const ACTIVITY_VIDEOS: VideoItem[] = ACTIVITIES.map((a) => ({
+  title: a.title,
+  meta: `${a.coreSkill} • ${ROUTINE_LABELS[a.routine] ?? a.routine}`,
+  tag: a.code,
+}))
+
+// One orientation per communication stage — kept in sync with STAGE_INFO.
+const STAGE_VIDEOS: VideoItem[] = STAGE_ORDER.map((code, i) => ({
+  title: `Tahap ${i + 1}: ${STAGE_INFO[code].name}`,
+  meta: STAGE_INFO[code].goal,
+  tag: code,
+}))
+
+const VIDEO_CATEGORIES: VideoCategory[] = [
+  {
+    id: "aktiviti",
+    label: "Demo Aktiviti",
+    description:
+      "Tonton cara melakukan setiap aktiviti harian, langkah demi langkah.",
+    hue: 12, // coral
+    videos: ACTIVITY_VIDEOS,
+  },
+  {
+    id: "teknik",
+    label: "Teknik Terapi",
+    description:
+      "Kuasai strategi pertuturan yang menjadi asas setiap aktiviti.",
+    hue: 172, // teal
+    videos: [
+      {
+        title: "Bercakap Banyak (Parallel Talk)",
+        meta: "Modelkan bahasa sepanjang rutin",
+        tag: "S1",
+      },
+      {
+        title: "Tunggu & Beri Ruang",
+        meta: "Beri masa anak memulakan komunikasi",
+        tag: "S2",
+      },
+      {
+        title: "Ulang, Panjang & Kembang",
+        meta: "Kembangkan perkataan kepada frasa",
+        tag: "S3",
+      },
+      {
+        title: "Beri Pilihan & Ambil Giliran",
+        meta: "Bina interaksi dua hala",
+        tag: "S4",
+      },
+      {
+        title: "Soalan WH & Naratif",
+        meta: "Bina ayat dan kemahiran bercerita",
+        tag: "S5",
+      },
+    ],
+  },
+  {
+    id: "tahap",
+    label: "Panduan Tahap",
+    description:
+      "Fahami matlamat dan fokus bagi tahap komunikasi anak anda.",
+    hue: 270, // purple
+    videos: STAGE_VIDEOS,
+  },
+  {
+    id: "aac",
+    label: "Asas Papan AAC",
+    description:
+      "Belajar menggunakan papan AAC untuk menyokong komunikasi anak.",
+    hue: 210, // blue
+    videos: [
+      {
+        title: "Mengenali Papan AAC",
+        meta: "Pengenalan komunikasi bantuan",
+        tag: "Asas",
+      },
+      {
+        title: "Model Perkataan Teras",
+        meta: "NAK · LAGI · HABIS · TOLONG",
+        tag: "Teras",
+      },
+      {
+        title: "Aided Language Input",
+        meta: "Sentuh simbol sambil bercakap",
+        tag: "Teknik",
+      },
+    ],
+  },
+]
 
 /* -------------------------------------------------------------------------- */
 /*  Component                                                                  */
@@ -118,19 +238,25 @@ const FALLBACK_PROFILE: Profile = {
 
 export default function DashboardHub({
   profile,
+  goal,
   routines = [],
   activities = [],
   onUpdateProfile,
+  onUpdateGoal,
   onUpdateRoutines,
   onSignOut,
 }: {
   profile?: Profile
+  /** Primary goal code (G1–G10) the parent picked after profiling. */
+  goal?: string
   /** Routine codes (R1–R10) the parent selected during onboarding. */
   routines?: string[]
   /** Activity codes (A1…) the parent curated during onboarding. */
   activities?: string[]
   /** Persists profile edits (from the profile page) and stage overrides. */
   onUpdateProfile?: (profile: Profile) => void
+  /** Persists a primary-goal change made from Tetapan. */
+  onUpdateGoal?: (goal: string) => void
   /** Persists daily-routine changes made from Tetapan. */
   onUpdateRoutines?: (routines: string[]) => void
   /** Clears the session and returns to the start of the flow. */
@@ -207,7 +333,12 @@ export default function DashboardHub({
 
         <div className="relative min-h-0 flex-1">
           <ViewLayer visible={activeNav === "ai"}>
-            <ChatInterface guardianName={guardianName} />
+            <ChatInterface
+              guardianName={guardianName}
+              childName={profile?.childName?.trim() || "anak anda"}
+              childStage={profile?.stage}
+              activityCodes={activities}
+            />
           </ViewLayer>
 
           <ViewLayer visible={activeNav === "aktiviti"}>
@@ -226,6 +357,10 @@ export default function DashboardHub({
             <ClassicDashboard />
           </ViewLayer>
 
+          <ViewLayer visible={activeNav === "analysis"}>
+            <AnalysisView profile={profile} goal={goal} />
+          </ViewLayer>
+
           <ViewLayer visible={activeNav === "notification"}>
             <PlaceholderView
               icon={Bell}
@@ -238,6 +373,8 @@ export default function DashboardHub({
               stage={profile?.stage}
               profiledAt={profile?.profiledAt}
               onStageChange={updateStage}
+              goal={goal}
+              onGoalChange={(g) => onUpdateGoal?.(g)}
               routines={routines}
               onRoutinesChange={(r) => onUpdateRoutines?.(r)}
             />
@@ -296,6 +433,7 @@ function NavRail({
 }) {
   const activitiesActive = activeNav === "classic"
   const profileActive = activeNav === "profile"
+  const notificationActive = activeNav === "notification"
   return (
     <div className="flex h-full flex-col px-4 py-5">
       {/* Logo */}
@@ -360,21 +498,22 @@ function NavRail({
             : { boxShadow: `inset 0 0 24px -16px hsl(${CORAL} / 0.8)` }
         }
       >
-        <CalendarCheck
+        <Film
           className="h-5 w-5 shrink-0"
           style={activitiesActive ? { color: `hsl(${CORAL})` } : undefined}
         />
-        Matlamat Anda
+        Library
       </button>
 
-      {/* User profile — opens the editable profile page */}
-      <div className="mt-4 border-t border-border/60 pt-4">
+      {/* User profile — opens the editable profile page, with a notification
+          bell pinned to the right of the same row. */}
+      <div className="mt-4 flex items-center gap-2 border-t border-border/60 pt-4">
         <button
           type="button"
           onClick={() => onSelect("profile")}
           aria-current={profileActive ? "page" : undefined}
           className={cn(
-            "flex w-full items-center gap-3 rounded-2xl p-2 text-left transition-all",
+            "flex min-w-0 flex-1 items-center gap-3 rounded-2xl p-2 text-left transition-all",
             profileActive ? "bg-white/[0.06]" : "hover:bg-white/5"
           )}
           style={
@@ -398,6 +537,32 @@ function NavRail({
             <p className="truncate text-sm font-semibold">{guardianName}</p>
             <p className="truncate text-xs text-muted-foreground">{relationship}</p>
           </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onSelect("notification")}
+          aria-current={notificationActive ? "page" : undefined}
+          aria-label="Notifikasi"
+          className={cn(
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl transition-all",
+            notificationActive
+              ? "text-foreground"
+              : "text-foreground/70 hover:bg-white/5 hover:text-foreground"
+          )}
+          style={
+            notificationActive
+              ? {
+                  background: `hsl(${CORAL} / 0.14)`,
+                  boxShadow: `inset 0 0 0 1px hsl(${CORAL} / 0.4)`,
+                }
+              : undefined
+          }
+        >
+          <Bell
+            className="h-5 w-5"
+            style={notificationActive ? { color: `hsl(${CORAL})` } : undefined}
+          />
         </button>
       </div>
     </div>
@@ -484,85 +649,198 @@ function MayaAvatar({ className }: { className?: string }) {
 /*  AI — Generative Chat Interface                                            */
 /* -------------------------------------------------------------------------- */
 
-function ChatInterface({ guardianName }: { guardianName: string }) {
+/** Time-of-day Malay greeting + a matching emoji. */
+function timeGreeting(): { text: string; emoji: string } {
+  const h = new Date().getHours()
+  if (h < 12) return { text: "Selamat pagi", emoji: "☀️" }
+  if (h < 15) return { text: "Selamat tengah hari", emoji: "🌤️" }
+  if (h < 19) return { text: "Selamat petang", emoji: "🌇" }
+  return { text: "Selamat malam", emoji: "🌙" }
+}
+
+function ChatInterface({
+  guardianName,
+  childName,
+  childStage,
+  activityCodes = [],
+}: {
+  guardianName: string
+  childName: string
+  childStage?: number
+  /** Activity codes the parent curated — scopes today's plan. */
+  activityCodes?: string[]
+}) {
+  const greeting = timeGreeting()
+
+  // Today's plan — up to 3 from the parent's curated set (fallback: catalogue).
+  const todays = useMemo(() => {
+    const pool = activityCodes.length
+      ? ACTIVITIES.filter((a) => activityCodes.includes(a.code))
+      : ACTIVITIES
+    return pool.slice(0, 3)
+  }, [activityCodes])
+
+  const [selectedCode, setSelectedCode] = useState<string | null>(null)
+  const selected = todays.find((a) => a.code === selectedCode) ?? null
+
+  // Local (no-backend) conversation state.
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [input, setInput] = useState("")
+  const [isTyping, setIsTyping] = useState(false)
+  const msgId = useRef(0)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  // Keep the latest message in view as the conversation grows.
+  useEffect(() => {
+    const el = scrollRef.current
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" })
+  }, [messages, isTyping, selectedCode])
+
+  function send(text: string) {
+    const trimmed = text.trim()
+    if (!trimmed || isTyping) return
+
+    setMessages((m) => [
+      ...m,
+      { id: ++msgId.current, role: "user", text: trimmed },
+    ])
+    setInput("")
+    setIsTyping(true)
+
+    // Simulate Maya "thinking", then answer with a context-aware canned reply.
+    const reply = generateReply(trimmed, { childName, selected })
+    window.setTimeout(
+      () => {
+        setMessages((m) => [
+          ...m,
+          { id: ++msgId.current, role: "maya", text: reply },
+        ])
+        setIsTyping(false)
+      },
+      700 + Math.random() * 700
+    )
+  }
+
   const chips = [
     "💡 Berikan tips untuk aktiviti ini",
     "🗣️ Bagaimana saya tahu jika anak faham?",
-    "⏭️ Saya dah buat aktiviti ini semalam, tunjuk seterusnya",
+    "⏭️ Tunjuk aktiviti seterusnya",
   ]
 
   return (
     <div className="flex h-full flex-col">
       {/* Conversational stream */}
       <div className="relative min-h-0 flex-1">
-        <div className="mx-auto h-full max-w-2xl space-y-5 overflow-y-auto px-4 pb-36 pt-6 md:px-6">
-          {/* Message 1 — proactive greeting */}
+        <div
+          ref={scrollRef}
+          className="mx-auto h-full max-w-2xl space-y-5 overflow-y-auto px-4 pb-36 pt-6 md:px-6"
+        >
+          {/* Message 1 — time-based greeting addressing the parent */}
           <Bubble delay={0}>
-            Selamat pagi, Ibu! ☀️ Bersedia untuk Hari ke-4 bagi matlamat{" "}
+            {greeting.text},{" "}
+            <span className="font-semibold text-foreground">{guardianName}</span>
+            ! {greeting.emoji}
+          </Bubble>
+
+          {/* Message 2 — today's plan + prompt to choose */}
+          <Bubble delay={80}>
+            Hari ini saya dah sediakan{" "}
             <span className="font-semibold text-foreground">
-              'Bina Kosa Kata'
+              {todays.length} aktiviti
             </span>{" "}
-            anak anda? Aktiviti hari ini ialah video ringkas 3 minit berkenaan
-            cara meniru bunyi haiwan. Jom kita tonton bersama!
+            untuk {childName}. Yang mana satu anda ingin mulakan dahulu?
           </Bubble>
 
-          {/* Message 2 — generative UI video progress card */}
-          <VideoProgressCard />
-
-          {/* Message 3 — contextual prompt + chips */}
-          <Bubble delay={120}>
-            Sambil menonton atau selepas selesai nanti, beritahu saya jika anda
-            memerlukan tips tambahan untuk menggalakkan anak anda mencuba sebutan
-            bunyi tersebut!
-          </Bubble>
-
-          <div className="flex flex-wrap gap-2 pl-12">
-            {chips.map((chip, i) => (
-              <button
-                key={chip}
-                type="button"
-                className="animate-fade-up rounded-full glass px-3.5 py-2 text-left text-xs font-medium text-foreground/85 transition-all hover:bg-white/[0.09] hover:text-foreground active:scale-[0.98]"
-                style={{
-                  animationDelay: `${200 + i * 70}ms`,
-                  animationFillMode: "both",
-                  boxShadow: `inset 0 0 22px -16px hsl(${CORAL} / 0.9)`,
-                }}
-              >
-                {chip}
-              </button>
+          {/* Message 3 — the 3 clickable activities */}
+          <div className="space-y-2.5 pl-12">
+            {todays.map((a, i) => (
+              <ActivityChoiceCard
+                key={a.code}
+                activity={a}
+                index={i}
+                selected={a.code === selectedCode}
+                onSelect={() =>
+                  setSelectedCode(selectedCode === a.code ? null : a.code)
+                }
+              />
             ))}
           </div>
+
+          {/* Message 4 — response to the chosen activity (+ video, coaching) */}
+          {selected && (
+            <>
+              <Bubble delay={0}>
+                Pilihan yang bagus! Jom mulakan{" "}
+                <span className="font-semibold text-foreground">
+                  '{selected.title}'
+                </span>
+                .{" "}
+                {selected.video
+                  ? "Tonton video panduan ringkas di bawah:"
+                  : "Berikut langkah ringkas untuk anda:"}
+              </Bubble>
+
+              {selected.video && <ActivityVideoCard activity={selected} />}
+
+              <ActivityCoachingCard
+                activity={selected}
+                childStage={childStage}
+              />
+
+              <div className="flex flex-wrap gap-2 pl-12">
+                {chips.map((chip, i) => (
+                  <button
+                    key={chip}
+                    type="button"
+                    onClick={() => send(chip)}
+                    className="animate-fade-up rounded-full glass px-3.5 py-2 text-left text-xs font-medium text-foreground/85 transition-all hover:bg-white/[0.09] hover:text-foreground active:scale-[0.98]"
+                    style={{
+                      animationDelay: `${120 + i * 70}ms`,
+                      animationFillMode: "both",
+                      boxShadow: `inset 0 0 22px -16px hsl(${CORAL} / 0.9)`,
+                    }}
+                  >
+                    {chip}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Free-form conversation */}
+          {messages.map((msg) =>
+            msg.role === "user" ? (
+              <UserBubble key={msg.id}>{msg.text}</UserBubble>
+            ) : (
+              <Bubble key={msg.id}>{msg.text}</Bubble>
+            )
+          )}
+          {isTyping && <TypingBubble />}
         </div>
 
-        {/* Floating chat input tray */}
+        {/* Floating chat input tray — typing only */}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-5 md:px-6">
-          <div className="pointer-events-auto mx-auto flex max-w-2xl items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] py-2 pl-3 pr-2 shadow-[0_12px_40px_-12px_hsl(240_60%_2%/0.9)] backdrop-blur-2xl">
-            <button
-              type="button"
-              aria-label="Lampirkan fail"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
-            >
-              <Paperclip className="h-5 w-5" />
-            </button>
-
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              send(input)
+            }}
+            className="pointer-events-auto mx-auto flex max-w-2xl items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] py-2 pl-5 pr-2 shadow-[0_12px_40px_-12px_hsl(240_60%_2%/0.9)] backdrop-blur-2xl"
+          >
             <input
               type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
               aria-label={`Tanya Maya, ${guardianName}`}
-              placeholder="Tanya tentang aktiviti hari ini, atau taip nota perkembangan anda..."
+              placeholder="Tanya Maya tentang aktiviti hari ini…"
               className="min-w-0 flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/80 focus:outline-none"
             />
 
             <button
-              type="button"
-              aria-label="Rakam suara"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
-            >
-              <Mic className="h-5 w-5" />
-            </button>
-            <button
-              type="button"
+              type="submit"
               aria-label="Hantar"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-background transition-transform active:scale-95"
+              disabled={!input.trim() || isTyping}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-background transition-transform active:scale-95 disabled:opacity-40"
               style={{
                 background: `hsl(${CORAL})`,
                 boxShadow: `0 0 18px -2px hsl(${CORAL} / 0.7)`,
@@ -570,11 +848,94 @@ function ChatInterface({ guardianName }: { guardianName: string }) {
             >
               <ArrowUp className="h-5 w-5" strokeWidth={2.5} />
             </button>
-          </div>
+          </form>
         </div>
       </div>
     </div>
   )
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Chat message model + canned "AI" responder (no backend)                   */
+/* -------------------------------------------------------------------------- */
+
+interface ChatMessage {
+  id: number
+  role: "user" | "maya"
+  text: string
+}
+
+/** Pick a reply at random for variety, so repeats feel less scripted. */
+function pick(options: string[]): string {
+  return options[Math.floor(Math.random() * options.length)]
+}
+
+/**
+ * Heuristic, keyword-driven responder that mimics an AI coach. Purely local —
+ * swap this for a real model call when a backend exists.
+ */
+function generateReply(
+  text: string,
+  ctx: { childName: string; selected: Activity | null }
+): string {
+  const t = text.toLowerCase()
+  const name = ctx.childName
+  const act = ctx.selected?.title
+
+  if (/(hai|helo|hello|salam|selamat)/.test(t)) {
+    return pick([
+      `Hai! Saya Maya, pembantu AI anda. Apa yang boleh saya bantu untuk ${name} hari ini?`,
+      `Helo! Gembira dapat membantu. Ada apa-apa tentang ${name} yang anda ingin bincangkan?`,
+    ])
+  }
+
+  if (/(tips|tip|cara|macam mana|bagaimana|galak)/.test(t)) {
+    return pick([
+      `${act ? `Untuk '${act}', cuba` : "Cuba"} ikut rentak ${name} — modelkan perkataan mudah dan tunggu 5 saat untuk beri ruang dia mencuba. Pujian kecil setiap percubaan amat membantu!`,
+      `Tip ringkas: kurangkan soalan, tambah komen. Contohnya sebut "Wah, kotak besar!" dan biarkan ${name} menyambung. Ulang perkataan yang dia sebut dan panjangkan sedikit.`,
+    ])
+  }
+
+  if (/(faham|understand|tahu)/.test(t)) {
+    return pick([
+      `Anda boleh tahu ${name} faham apabila dia bertindak balas — pandang objek, tunjuk, ikut arahan ringkas, atau cuba sebut semula. Tak perlu sempurna; respons kecil pun kiraan.`,
+      `Perhatikan isyarat: kontak mata, senyum, menunjuk, atau membuat bunyi. Itu tanda ${name} sedang memproses dan cuba berkomunikasi.`,
+    ])
+  }
+
+  if (/(tak nak|degil|menangis|marah|tantrum|frust)/.test(t)) {
+    return pick([
+      `Tak mengapa — itu normal. Berhenti seketika, turunkan tekanan, dan cuba semula bila ${name} lebih tenang. Jadikan ia main, bukan ujian. 💛`,
+      `Cuba ikut minat ${name} dahulu. Kalau dia menolak aktiviti, sambung dengan benda yang dia suka, kemudian selitkan perkataan sasaran secara santai.`,
+    ])
+  }
+
+  if (/(seterus|next|lepas ni|selepas)/.test(t)) {
+    return pick([
+      `Bagus! Selepas ini, pilih satu lagi aktiviti dari senarai hari ini. 3 aktiviti × 5 minit sudah memadai untuk dos harian 15 minit.`,
+      `Langkah seterusnya: ulang aktiviti yang sama esok untuk pengukuhan, atau cuba aktiviti baharu dalam rutin berbeza supaya ${name} belajar merentas situasi.`,
+    ])
+  }
+
+  if (/(video|tonton)/.test(t)) {
+    return act
+      ? `Video untuk '${act}' menunjukkan cara melakukannya langkah demi langkah. Tonton dahulu, kemudian cuba bersama ${name}.`
+      : `Pilih satu aktiviti di atas — jika ada video panduan, ia akan dipaparkan untuk anda tonton.`
+  }
+
+  if (/(terima kasih|tq|thanks|thank)/.test(t)) {
+    return pick([
+      "Sama-sama! Saya sentiasa di sini bila anda perlukan bantuan. 🌟",
+      `Sama-sama! Teruskan usaha — konsistensi anda buat perbezaan besar untuk ${name}.`,
+    ])
+  }
+
+  // Fallback — acknowledge + nudge forward.
+  return pick([
+    `Saya faham. Boleh ceritakan sedikit lagi supaya saya boleh cadangkan langkah terbaik untuk ${name}?`,
+    `Nota diterima! Untuk hari ini, fokus pada satu aktiviti dan raikan setiap percubaan kecil ${name}.`,
+    `Soalan yang baik. Cuba aktiviti hari ini dahulu, dan beritahu saya bagaimana respons ${name} — kita boleh laraskan dari situ.`,
+  ])
 }
 
 /** A left-aligned Maya message bubble with avatar. */
@@ -598,8 +959,114 @@ function Bubble({
   )
 }
 
-/** Message 2 — premium dark-glass video progress card, native to the feed. */
-function VideoProgressCard() {
+/** A right-aligned parent message bubble. */
+function UserBubble({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex animate-fade-up justify-end">
+      <div
+        className="max-w-[85%] rounded-2xl rounded-tr-sm px-4 py-3 text-sm leading-relaxed text-background"
+        style={{ background: `hsl(${CORAL})` }}
+      >
+        {children}
+      </div>
+    </div>
+  )
+}
+
+/** Maya "typing…" indicator with three animated dots. */
+function TypingBubble() {
+  return (
+    <div className="flex animate-fade-up items-start gap-3">
+      <MayaAvatar />
+      <div className="flex items-center gap-1 rounded-2xl rounded-tl-sm glass-strong px-4 py-4">
+        {[0, 150, 300].map((delay) => (
+          <span
+            key={delay}
+            className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground"
+            style={{ animationDelay: `${delay}ms` }}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** Map a numeric stage (1–5) to a StageCode, clamped & safe. */
+function toStageCode(stage?: number): StageCode {
+  const n = Math.min(5, Math.max(1, stage ?? 1))
+  return `T${n}` as StageCode
+}
+
+/** One clickable activity in the chat's "today's plan" list. */
+function ActivityChoiceCard({
+  activity,
+  index,
+  selected,
+  onSelect,
+}: {
+  activity: Activity
+  index: number
+  selected: boolean
+  onSelect: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className={cn(
+        "flex w-full animate-fade-up items-center gap-3 rounded-2xl glass-strong p-3.5 text-left transition-all hover:bg-white/[0.06] active:scale-[0.99]",
+        selected && "bg-white/[0.06]"
+      )}
+      style={{
+        animationDelay: `${index * 60}ms`,
+        animationFillMode: "both",
+        ...(selected
+          ? {
+              boxShadow: `0 0 0 1px hsl(${CORAL} / 0.6), 0 0 28px -8px hsl(${CORAL} / 0.5)`,
+            }
+          : {}),
+      }}
+    >
+      {/* Step number */}
+      <span
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold"
+        style={{ background: `hsl(${CORAL} / 0.16)`, color: `hsl(${CORAL})` }}
+      >
+        {index + 1}
+      </span>
+
+      {/* Title + meta */}
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1.5">
+          <span className="truncate text-sm font-semibold text-foreground">
+            {activity.title}
+          </span>
+          {activity.video && (
+            <span
+              className="flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+              style={{ background: `hsl(${TEAL} / 0.16)`, color: `hsl(${TEAL})` }}
+            >
+              <Play className="h-2.5 w-2.5" fill="currentColor" />
+              Video
+            </span>
+          )}
+        </span>
+        <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+          {ROUTINE_LABELS[activity.routine] ?? activity.routine} ·{" "}
+          {activity.strategyName}
+        </span>
+      </span>
+
+      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+    </button>
+  )
+}
+
+/** Premium dark-glass video card for a selected activity's demo video. */
+function ActivityVideoCard({ activity }: { activity: Activity }) {
+  const video = activity.video
+  if (!video) return null
   return (
     <div
       className="ml-12 max-w-md animate-fade-up overflow-hidden rounded-3xl glass-strong"
@@ -608,10 +1075,9 @@ function VideoProgressCard() {
       {/* Media area */}
       <div className="relative">
         <div className="flex h-44 items-center justify-center bg-gradient-to-br from-white/[0.06] to-white/[0.02]">
-          {/* Coral play button overlay */}
           <button
             type="button"
-            aria-label="Main video"
+            aria-label={`Main video: ${video.title}`}
             className="group flex h-16 w-16 items-center justify-center rounded-full transition-transform active:scale-95"
             style={{
               background: `hsl(${CORAL})`,
@@ -625,7 +1091,7 @@ function VideoProgressCard() {
           </button>
         </div>
 
-        {/* Teal day badge */}
+        {/* Duration badge */}
         <span
           className="absolute right-3 top-3 rounded-full px-2.5 py-1 text-[11px] font-semibold backdrop-blur-md"
           style={{
@@ -634,40 +1100,84 @@ function VideoProgressCard() {
             boxShadow: `inset 0 0 0 1px hsl(${TEAL} / 0.35)`,
           }}
         >
-          Hari 4 daripada 30
+          {video.duration}
         </span>
       </div>
 
-      {/* Meta + progress */}
-      <div className="space-y-3 p-4">
-        <div>
-          <h3 className="text-sm font-bold tracking-tight">
-            Aktiviti: Meniru Bunyi Haiwan 🐶🐱
-          </h3>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            3 minit • Fokus: Vokalisasi Awal
-          </p>
-        </div>
-
-        {/* Progress footer */}
-        <div>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-            <div
-              className="h-full rounded-full transition-all duration-700"
-              style={{ width: "0%", background: `hsl(${TEAL})` }}
-            />
-          </div>
-          <p className="mt-1.5 text-[11px] font-medium text-muted-foreground">
-            0% Selesai
-          </p>
-        </div>
+      {/* Meta */}
+      <div className="p-4">
+        <h3 className="text-sm font-bold tracking-tight">{video.title}</h3>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          {video.duration} • Fokus: {video.focus}
+        </p>
       </div>
     </div>
   )
 }
 
+/** Compact coaching card — materials + the script for the child's stage. */
+function ActivityCoachingCard({
+  activity,
+  childStage,
+}: {
+  activity: Activity
+  childStage?: number
+}) {
+  const stageCode = toStageCode(childStage)
+  const content =
+    activity.stages.find((s) => s.stage === stageCode) ?? activity.stages[0]
+
+  return (
+    <div
+      className="ml-12 max-w-md animate-fade-up space-y-3 rounded-3xl glass-strong p-4"
+      style={{ animationDelay: "120ms", animationFillMode: "both" }}
+    >
+      {/* Materials */}
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Bahan diperlukan
+        </p>
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {activity.materials.map((m) => (
+            <span
+              key={m}
+              className="rounded-full px-2.5 py-1 text-[11px] font-medium"
+              style={{ background: `hsl(${TEAL} / 0.14)`, color: `hsl(${TEAL})` }}
+            >
+              {m}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Stage-specific instructions */}
+      {content && (
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Cara buat
+          </p>
+          <p className="mt-1 text-sm leading-relaxed text-foreground/90">
+            {content.instructions}
+          </p>
+          {content.dialogue.length > 0 && (
+            <p
+              className="mt-2 rounded-xl px-3 py-2 text-xs italic"
+              style={{
+                background: `hsl(${CORAL} / 0.08)`,
+                color: "hsl(var(--foreground) / 0.85)",
+              }}
+            >
+              💬 “{content.dialogue[0]}”
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* -------------------------------------------------------------------------- */
-/*  Board — Classic Dashboard (30-day grid · 10 goals · video library)        */
+/*  Library — categorized parent-coaching video library                       */
 /* -------------------------------------------------------------------------- */
 
 function ClassicDashboard() {
@@ -675,122 +1185,66 @@ function ClassicDashboard() {
     <div className="h-full overflow-y-auto px-4 pb-10 pt-5 md:px-8 md:pt-6">
       <div className="mx-auto max-w-3xl space-y-8">
         <p className="text-sm text-muted-foreground">
-          Matlamat perkembangan dan pustaka video anak anda.
+          Pustaka video panduan untuk membantu anak anda berkomunikasi.
         </p>
 
-        {/* 10 parent-aspiration goals (shared with the onboarding picker) */}
-        <section>
-          <h2 className="mb-3 px-1 text-sm font-semibold tracking-tight">
-            10 Matlamat Perkembangan Teras
-          </h2>
-          <ul className="space-y-2">
-            {GOALS.map((goal, i) => {
-              // Visual progress state — first few complete, the next in focus.
-              const done = i < 3
-              const active = i === 3
-              return (
-                <li
-                  key={goal.code}
-                  className="flex items-center gap-3 rounded-2xl glass px-4 py-3"
-                >
-                  <span
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-sm font-bold"
-                    style={
-                      done
-                        ? { background: `hsl(${TEAL} / 0.18)`, color: `hsl(${TEAL})` }
-                        : active
-                          ? {
-                              background: `hsl(${CORAL} / 0.18)`,
-                              color: `hsl(${CORAL})`,
-                            }
-                          : { background: "hsl(0 0% 100% / 0.05)" }
-                    }
-                  >
-                    {done ? (
-                      <Check className="h-4 w-4" strokeWidth={3} />
-                    ) : active ? (
-                      i + 1
-                    ) : (
-                      <Lock className="h-3.5 w-3.5 text-muted-foreground" />
-                    )}
-                  </span>
-                  <span
-                    className={cn(
-                      "flex-1 text-sm font-medium",
-                      done
-                        ? "text-foreground/70"
-                        : active
-                          ? "text-foreground"
-                          : "text-muted-foreground"
-                    )}
-                  >
-                    {goal.aspiration}
-                  </span>
-                  {active && (
-                    <span
-                      className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                      style={{
-                        background: `hsl(${CORAL} / 0.18)`,
-                        color: `hsl(${CORAL})`,
-                      }}
-                    >
-                      Aktif
-                    </span>
-                  )}
-                </li>
-              )
-            })}
-          </ul>
-        </section>
-
-        {/* Video library card deck */}
-        <section>
-          <h2 className="mb-3 px-1 text-sm font-semibold tracking-tight">
-            Pustaka Video
-          </h2>
-          <div className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:px-0">
-            {VIDEO_LIBRARY.map((video) => (
-              <article
-                key={video.title}
-                className="w-44 shrink-0 snap-start overflow-hidden rounded-2xl glass-strong"
-              >
-                <div className="relative flex h-24 items-center justify-center bg-gradient-to-br from-white/[0.06] to-white/[0.02]">
-                  <span
-                    className="flex h-10 w-10 items-center justify-center rounded-full"
-                    style={{
-                      background: `hsl(${CORAL})`,
-                      boxShadow: `0 0 20px -4px hsl(${CORAL} / 0.8)`,
-                    }}
-                  >
-                    <Play
-                      className="ml-0.5 h-4 w-4 text-background"
-                      fill="currentColor"
-                    />
-                  </span>
-                  <span
-                    className="absolute right-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-semibold backdrop-blur-md"
-                    style={{
-                      background: `hsl(${TEAL} / 0.18)`,
-                      color: `hsl(${TEAL})`,
-                    }}
-                  >
-                    {video.tag}
-                  </span>
-                </div>
-                <div className="p-3">
-                  <h3 className="truncate text-xs font-bold tracking-tight">
-                    {video.title}
-                  </h3>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">
-                    {video.meta}
-                  </p>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
+        {VIDEO_CATEGORIES.map((cat) => (
+          <section key={cat.id}>
+            <h2 className="px-1 text-sm font-semibold tracking-tight">
+              {cat.label}
+            </h2>
+            <p className="mb-3 mt-0.5 px-1 text-xs text-muted-foreground">
+              {cat.description}
+            </p>
+            <div className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:px-0">
+              {cat.videos.map((video) => (
+                <VideoCard
+                  key={`${cat.id}-${video.tag}-${video.title}`}
+                  video={video}
+                  hue={cat.hue}
+                />
+              ))}
+            </div>
+          </section>
+        ))}
       </div>
     </div>
+  )
+}
+
+/** A single video card in the library deck, accented by its category hue. */
+function VideoCard({ video, hue }: { video: VideoItem; hue: number }) {
+  return (
+    <article className="w-44 shrink-0 snap-start overflow-hidden rounded-2xl glass-strong">
+      <div className="relative flex h-24 items-center justify-center bg-gradient-to-br from-white/[0.06] to-white/[0.02]">
+        <span
+          className="flex h-10 w-10 items-center justify-center rounded-full"
+          style={{
+            background: `hsl(${CORAL})`,
+            boxShadow: `0 0 20px -4px hsl(${CORAL} / 0.8)`,
+          }}
+        >
+          <Play className="ml-0.5 h-4 w-4 text-background" fill="currentColor" />
+        </span>
+        <span
+          className="absolute right-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-semibold backdrop-blur-md"
+          style={{
+            background: `hsl(${hue} 90% 60% / 0.18)`,
+            color: `hsl(${hue} 90% 78%)`,
+          }}
+        >
+          {video.tag}
+        </span>
+      </div>
+      <div className="p-3">
+        <h3 className="truncate text-xs font-bold tracking-tight">
+          {video.title}
+        </h3>
+        <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">
+          {video.meta}
+        </p>
+      </div>
+    </article>
   )
 }
 

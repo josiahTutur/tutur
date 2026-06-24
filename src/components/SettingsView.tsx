@@ -1,7 +1,8 @@
 import { useState } from "react"
 import { cn } from "@/lib/utils"
 import { ROUTINE_LABELS, STAGE_INFO, STAGE_ORDER } from "@/lib/activities"
-import { Bell, Check, Clock, Globe, Sparkles, X } from "lucide-react"
+import { GOALS } from "@/lib/goals"
+import { Bell, Check, Clock, Globe, Lock, Sparkles, Target, X } from "lucide-react"
 
 /** Ordered routine list (R1–R10) shared with the onboarding routine picker. */
 const ROUTINE_ENTRIES = Object.entries(ROUTINE_LABELS)
@@ -54,6 +55,8 @@ export default function SettingsView({
   stage = 1,
   profiledAt,
   onStageChange,
+  goal,
+  onGoalChange,
   routines = [],
   onRoutinesChange,
 }: {
@@ -63,6 +66,10 @@ export default function SettingsView({
   profiledAt?: string
   /** Persists a manual stage override. */
   onStageChange: (stage: number) => void
+  /** Currently selected primary goal (G1–G10). */
+  goal?: string
+  /** Persists a primary-goal change. */
+  onGoalChange: (goal: string) => void
   /** Currently selected daily routines (R1–R10). */
   routines?: string[]
   /** Persists a daily-routine change. */
@@ -89,6 +96,21 @@ export default function SettingsView({
   function confirmStageChange() {
     onStageChange(pendingStage)
     setStageDialogOpen(false)
+  }
+
+  // Goal change is likewise gated behind a confirmation popup. Single-select,
+  // so `pendingGoal` holds the in-dialog choice until confirmed.
+  const [goalDialogOpen, setGoalDialogOpen] = useState(false)
+  const [pendingGoal, setPendingGoal] = useState<string | undefined>(goal)
+
+  function openGoalDialog() {
+    setPendingGoal(goal) // start from the current goal each time
+    setGoalDialogOpen(true)
+  }
+
+  function confirmGoalChange() {
+    if (pendingGoal) onGoalChange(pendingGoal)
+    setGoalDialogOpen(false)
   }
 
   // Routine change is likewise gated behind a confirmation popup. Multi-select,
@@ -157,12 +179,81 @@ export default function SettingsView({
             <button
               type="button"
               onClick={openStageDialog}
-              className="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors"
-              style={{ background: `hsl(${CORAL} / 0.18)`, color: `hsl(${CORAL})` }}
+              className="shrink-0 rounded-full px-4 py-2 text-xs font-bold text-background transition-all active:scale-[0.97]"
+              style={{ background: `hsl(${CORAL})`, boxShadow: `0 4px 16px -4px hsl(${CORAL} / 0.7)` }}
             >
               Tukar
             </button>
           </div>
+        </Section>
+
+        {/* 10 core developmental goals — shared with the onboarding picker */}
+        <Section icon={Target} title="10 Matlamat Perkembangan Teras">
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Matlamat utama yang dipilih untuk anak anda. Matlamat aktif
+              menjadi tumpuan Maya — yang lain dibuka setelah ia tercapai.
+            </p>
+            <button
+              type="button"
+              onClick={openGoalDialog}
+              className="shrink-0 rounded-full px-4 py-2 text-xs font-bold text-background transition-all active:scale-[0.97]"
+              style={{ background: `hsl(${CORAL})`, boxShadow: `0 4px 16px -4px hsl(${CORAL} / 0.7)` }}
+            >
+              Tukar
+            </button>
+          </div>
+
+          <ul className="space-y-2">
+            {GOALS.map((g, i) => {
+              // None are completed yet — the chosen goal is active, all the
+              // rest stay locked until it is achieved.
+              const active = g.code === goal
+              return (
+                <li
+                  key={g.code}
+                  className="flex items-center gap-3 rounded-2xl bg-white/[0.03] px-4 py-3"
+                >
+                  <span
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-sm font-bold"
+                    style={
+                      active
+                        ? {
+                            background: `hsl(${CORAL} / 0.18)`,
+                            color: `hsl(${CORAL})`,
+                          }
+                        : { background: "hsl(0 0% 100% / 0.05)" }
+                    }
+                  >
+                    {active ? (
+                      i + 1
+                    ) : (
+                      <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                    )}
+                  </span>
+                  <span
+                    className={cn(
+                      "flex-1 text-sm font-medium",
+                      active ? "text-foreground" : "text-muted-foreground"
+                    )}
+                  >
+                    {g.aspiration}
+                  </span>
+                  {active && (
+                    <span
+                      className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                      style={{
+                        background: `hsl(${CORAL} / 0.18)`,
+                        color: `hsl(${CORAL})`,
+                      }}
+                    >
+                      Aktif
+                    </span>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
         </Section>
 
         {/* Daily routines — summary, changed via a confirmed dialog */}
@@ -187,8 +278,8 @@ export default function SettingsView({
               <button
                 type="button"
                 onClick={openRoutineDialog}
-                className="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors"
-                style={{ background: `hsl(${CORAL} / 0.18)`, color: `hsl(${CORAL})` }}
+                className="shrink-0 rounded-full px-4 py-2 text-xs font-bold text-background transition-all active:scale-[0.97]"
+                style={{ background: `hsl(${CORAL})`, boxShadow: `0 4px 16px -4px hsl(${CORAL} / 0.7)` }}
               >
                 Tukar
               </button>
@@ -255,21 +346,24 @@ export default function SettingsView({
           </p>
           <div className="grid grid-cols-2 gap-2">
             {[
-              { id: "ms" as const, label: "Bahasa Melayu" },
-              { id: "en" as const, label: "English" },
+              { id: "ms" as const, label: "Bahasa Melayu", soon: false },
+              { id: "en" as const, label: "English", soon: true },
             ].map((opt) => {
-              const active = language === opt.id
+              const active = !opt.soon && language === opt.id
               return (
                 <button
                   key={opt.id}
                   type="button"
-                  onClick={() => setLanguage(opt.id)}
+                  onClick={() => !opt.soon && setLanguage(opt.id)}
+                  disabled={opt.soon}
                   aria-pressed={active}
                   className={cn(
-                    "rounded-2xl border px-4 py-3 text-sm font-semibold transition-all",
-                    active
-                      ? "bg-white/[0.06] text-foreground"
-                      : "border-white/10 text-foreground/70 hover:border-white/20 hover:text-foreground"
+                    "relative flex items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold transition-all",
+                    opt.soon
+                      ? "cursor-not-allowed border-white/10 text-foreground/40"
+                      : active
+                        ? "bg-white/[0.06] text-foreground"
+                        : "border-white/10 text-foreground/70 hover:border-white/20 hover:text-foreground"
                   )}
                   style={
                     active
@@ -282,6 +376,17 @@ export default function SettingsView({
                   }
                 >
                   {opt.label}
+                  {opt.soon && (
+                    <span
+                      className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+                      style={{
+                        background: `hsl(${CORAL} / 0.18)`,
+                        color: `hsl(${CORAL})`,
+                      }}
+                    >
+                      Akan datang
+                    </span>
+                  )}
                 </button>
               )
             })}
@@ -298,6 +403,17 @@ export default function SettingsView({
           onPick={setPendingStage}
           onConfirm={confirmStageChange}
           onCancel={() => setStageDialogOpen(false)}
+        />
+      )}
+
+      {/* Goal-change confirmation popup */}
+      {goalDialogOpen && (
+        <GoalChangeDialog
+          currentGoal={goal}
+          pendingGoal={pendingGoal}
+          onPick={setPendingGoal}
+          onConfirm={confirmGoalChange}
+          onCancel={() => setGoalDialogOpen(false)}
         />
       )}
 
@@ -447,6 +563,160 @@ function StageChangeDialog({
               </>
             ) : (
               "Pilih tahap yang berbeza untuk menukar."
+            )}
+          </p>
+          <div className="grid grid-cols-2 gap-2.5">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded-2xl py-3 text-sm font-semibold text-foreground transition-all active:scale-[0.99] glass hover:bg-white/[0.08]"
+            >
+              Tidak
+            </button>
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={!changed}
+              className="rounded-2xl py-3 text-sm font-semibold text-background transition-all active:scale-[0.99] disabled:opacity-40"
+              style={{
+                background: `hsl(${CORAL})`,
+                boxShadow: changed ? `0 0 24px -6px hsl(${CORAL} / 0.7)` : "none",
+              }}
+            >
+              Ya, Tukar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Goal-change confirmation dialog                                           */
+/*                                                                            */
+/*  Single-select the primary goal, then double-confirm with Ya / Tidak.      */
+/*  "Ya" is only enabled once a goal different from the current one is picked. */
+/* -------------------------------------------------------------------------- */
+
+function GoalChangeDialog({
+  currentGoal,
+  pendingGoal,
+  onPick,
+  onConfirm,
+  onCancel,
+}: {
+  currentGoal?: string
+  pendingGoal?: string
+  onPick: (goal: string) => void
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  const changed = !!pendingGoal && pendingGoal !== currentGoal
+  const target = GOALS.find((g) => g.code === pendingGoal)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={onCancel}
+        aria-hidden
+      />
+
+      {/* Panel */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Tukar matlamat utama"
+        className="relative flex max-h-[88vh] w-full max-w-md animate-fade-up flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-background/95 backdrop-blur-2xl sm:rounded-3xl"
+        style={{ animationFillMode: "both" }}
+      >
+        {/* Header */}
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border/60 px-5 py-4">
+          <div className="min-w-0">
+            <h2 className="text-base font-bold tracking-tight">
+              Tukar Matlamat Utama
+            </h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Pilih matlamat baharu untuk anak anda, kemudian sahkan.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            aria-label="Tutup"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Goal options */}
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-5 py-4">
+          {GOALS.map((g) => {
+            const selected = g.code === pendingGoal
+            const isCurrent = g.code === currentGoal
+            return (
+              <button
+                key={g.code}
+                type="button"
+                onClick={() => onPick(g.code)}
+                aria-pressed={selected}
+                className={cn(
+                  "flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-all",
+                  selected
+                    ? "bg-white/[0.06]"
+                    : "border-white/10 hover:border-white/20 hover:bg-white/[0.03]"
+                )}
+                style={
+                  selected
+                    ? {
+                        borderColor: `hsl(${CORAL} / 0.85)`,
+                        boxShadow: `0 0 0 1px hsl(${CORAL} / 0.6)`,
+                      }
+                    : undefined
+                }
+              >
+                <span
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-sm font-bold"
+                  style={
+                    selected
+                      ? { background: `hsl(${CORAL} / 0.18)`, color: `hsl(${CORAL})` }
+                      : { background: "hsl(0 0% 100% / 0.05)" }
+                  }
+                >
+                  {selected ? <Check className="h-4 w-4" strokeWidth={3} /> : null}
+                </span>
+                <span className="min-w-0 flex-1 text-sm font-semibold text-foreground">
+                  {g.aspiration}
+                </span>
+                {isCurrent && (
+                  <span
+                    className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                    style={{ background: `hsl(${TEAL} / 0.16)`, color: `hsl(${TEAL})` }}
+                  >
+                    Semasa
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Confirmation footer */}
+        <div className="shrink-0 space-y-3 border-t border-border/60 px-5 py-4">
+          <p className="text-center text-sm text-foreground/90">
+            {changed ? (
+              <>
+                Tukar matlamat utama anak anda ke{" "}
+                <span className="font-bold" style={{ color: `hsl(${CORAL})` }}>
+                  “{target?.aspiration}”
+                </span>
+                ?
+              </>
+            ) : (
+              "Pilih matlamat yang berbeza untuk menukar."
             )}
           </p>
           <div className="grid grid-cols-2 gap-2.5">
@@ -673,15 +943,15 @@ function ToggleRow({
         aria-checked={checked}
         aria-label={label}
         onClick={() => onChange(!checked)}
-        className="relative h-6 w-11 shrink-0 rounded-full transition-colors"
+        className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full px-0.5 transition-colors"
         style={{
           background: checked ? `hsl(${CORAL})` : "hsl(0 0% 100% / 0.12)",
         }}
       >
         <span
           className={cn(
-            "absolute top-0.5 h-5 w-5 rounded-full bg-background transition-transform",
-            checked ? "translate-x-[1.375rem]" : "translate-x-0.5"
+            "h-5 w-5 rounded-full bg-background shadow-sm transition-transform",
+            checked ? "translate-x-5" : "translate-x-0"
           )}
         />
       </button>

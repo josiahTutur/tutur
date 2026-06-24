@@ -67,6 +67,10 @@ export default function App() {
   // shortcut today; via real sign-in + profiling once those are wired up).
   const [profile, setProfile] = useState<Profile>()
 
+  // Primary developmental goal (G1–G10) the parent picked after profiling.
+  // Anchors the intervention pathway and is editable later from Tetapan.
+  const [goal, setGoal] = useState<string>()
+
   // Daily routines the parent anchors therapy into (R1–R10). Drives which
   // activities the library surfaces in the hub.
   const [routines, setRoutines] = useState<string[]>([])
@@ -78,7 +82,14 @@ export default function App() {
   // The goal/routine matrices and hub are full-bleed responsive layouts, so they
   // render outside the mobile-width column used by the rest of the onboarding flow.
   if (view === "goals") {
-    return <GoalSelection onComplete={() => setView("routines")} />
+    return (
+      <GoalSelection
+        onComplete={(goalCode) => {
+          setGoal(goalCode)
+          setView("routines")
+        }}
+      />
+    )
   }
   if (view === "routines") {
     return (
@@ -107,12 +118,15 @@ export default function App() {
     return (
       <DashboardHub
         profile={profile}
+        goal={goal}
         routines={routines}
         activities={activities}
         onUpdateProfile={setProfile}
+        onUpdateGoal={setGoal}
         onUpdateRoutines={setRoutines}
         onSignOut={() => {
           setProfile(undefined)
+          setGoal(undefined)
           setRoutines([])
           setActivities([])
           setProfilingAnswers([])

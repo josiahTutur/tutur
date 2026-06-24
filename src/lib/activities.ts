@@ -23,6 +23,19 @@ export interface StageContent {
   dialogue: string[] // Dialogue Script (BM)
 }
 
+/** Optional demo video accompanying an activity. */
+export interface ActivityVideo {
+  title: string
+  duration: string // e.g. "3 min"
+  focus: string // e.g. "Perhatian Bersama"
+}
+
+/** An AAC symbol the parent models during the activity. */
+export interface AacWord {
+  label: string
+  emoji: string
+}
+
 export interface Activity {
   code: string // e.g. "A1"
   title: string
@@ -32,6 +45,10 @@ export interface Activity {
   coreSkill: string // e.g. "Joint Attention + Parallel Talk"
   type: "Normal" | "Seasonal"
   materials: string[]
+  /** AAC symbols relevant to this activity (for the in-activity AAC board). */
+  aacWords: AacWord[]
+  /** Optional demo video — not every activity has one. */
+  video?: ActivityVideo
   stages: StageContent[]
 }
 
@@ -104,6 +121,21 @@ export const ACTIVITIES: Activity[] = [
     coreSkill: "Joint Attention + Parallel Talk",
     type: "Normal",
     materials: ["Kotak Shopee kosong", "Papan AAC"],
+    aacWords: [
+      { label: "Lihat", emoji: "👀" },
+      { label: "Jom", emoji: "🙌" },
+      { label: "Nak", emoji: "✋" },
+      { label: "Masuk", emoji: "📥" },
+      { label: "Keluar", emoji: "📤" },
+      { label: "Lagi", emoji: "➕" },
+      { label: "Kotak", emoji: "📦" },
+      { label: "Habis", emoji: "✅" },
+    ],
+    video: {
+      title: "Demo: Jom Masuk Keluar Kotak",
+      duration: "3 min",
+      focus: "Perhatian Bersama",
+    },
     stages: [
       {
         stage: "T1",
@@ -148,6 +180,21 @@ export const ACTIVITIES: Activity[] = [
     coreSkill: "Language Expansion",
     type: "Normal",
     materials: ["Milo", "Biskut Marie", "Cawan", "Papan AAC"],
+    aacWords: [
+      { label: "Lihat", emoji: "👀" },
+      { label: "Nak", emoji: "✋" },
+      { label: "Lagi", emoji: "➕" },
+      { label: "Milo", emoji: "🥤" },
+      { label: "Biskut", emoji: "🍪" },
+      { label: "Celup", emoji: "💧" },
+      { label: "Sedap", emoji: "😋" },
+      { label: "Habis", emoji: "✅" },
+    ],
+    video: {
+      title: "Demo: Celup Biskut Dalam Milo",
+      duration: "4 min",
+      focus: "Perluasan Bahasa",
+    },
     stages: [
       {
         stage: "T1",
@@ -190,6 +237,16 @@ export const ACTIVITIES: Activity[] = [
     coreSkill: "Withhold & Wait",
     type: "Normal",
     materials: ["Stoking keluarga", "Papan AAC"],
+    aacWords: [
+      { label: "Lihat", emoji: "👀" },
+      { label: "Mana", emoji: "❓" },
+      { label: "Sini", emoji: "👇" },
+      { label: "Nak", emoji: "✋" },
+      { label: "Stoking", emoji: "🧦" },
+      { label: "Jumpa", emoji: "🎉" },
+      { label: "Tolong", emoji: "🙏" },
+      { label: "Habis", emoji: "✅" },
+    ],
     stages: [
       {
         stage: "T1",
