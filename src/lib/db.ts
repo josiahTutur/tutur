@@ -217,3 +217,24 @@ export async function updateCompletion(
     .update({ note, seconds })
     .eq("id", id)
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Feedback survey                                                           */
+/* -------------------------------------------------------------------------- */
+
+/** Submit a feedback-form response. Returns true on success. */
+export async function saveFeedback(
+  responses: Record<string, string | string[]>
+): Promise<boolean> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  const { error } = await supabase
+    .from("feedback")
+    .insert({ guardian_id: user?.id ?? null, responses })
+  if (error) {
+    console.error("[saveFeedback] failed:", error)
+    return false
+  }
+  return true
+}

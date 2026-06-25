@@ -7,6 +7,7 @@ import {
   Settings,
   ArrowUp,
   Lock,
+  MessageSquare,
   Play,
   LayoutGrid,
   BrainCircuit,
@@ -41,6 +42,7 @@ import {
   updateCompletion,
 } from "@/lib/db"
 import AnalysisView from "@/components/AnalysisView"
+import FeedbackView from "@/components/FeedbackView"
 import ProfileView from "@/components/ProfileView"
 import SettingsView from "@/components/SettingsView"
 
@@ -83,6 +85,7 @@ type NavId =
   | "aktiviti"
   | "aac"
   | "analysis"
+  | "feedback"
   | "notification"
   | "setting"
   | "classic"
@@ -95,6 +98,7 @@ const VIEW_TITLES: Record<NavId, string> = {
   aac: "Papan AAC",
   classic: "Library",
   analysis: "Analisis",
+  feedback: "Maklum Balas",
   notification: "Notifikasi",
   setting: "Tetapan",
   profile: "Profil",
@@ -114,6 +118,7 @@ const NAV_ITEMS: ReadonlyArray<{
   { id: "ai", label: "Panduan AI", icon: BrainCircuit },
   { id: "aac", label: "Papan", icon: LayoutGrid },
   { id: "analysis", label: "Analisis", icon: BarChart3, comingSoon: true },
+  { id: "feedback", label: "Maklum Balas", icon: MessageSquare },
   { id: "setting", label: "Tetapan", icon: Settings },
 ]
 
@@ -439,6 +444,10 @@ export default function DashboardHub({
               </div>
               <ComingSoonOverlay />
             </div>
+          </ViewLayer>
+
+          <ViewLayer visible={activeNav === "feedback"}>
+            <FeedbackView />
           </ViewLayer>
 
           <ViewLayer visible={activeNav === "notification"}>
