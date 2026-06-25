@@ -265,7 +265,7 @@ export default function ProfilingResults({
   onComplete,
 }: {
   answers: string[]
-  onComplete: () => void
+  onComplete: (stage: number) => void
 }) {
   // Engine runs once; the reveal is gated behind the 3s animation.
   const result = useMemo(() => computeResult(answers), [answers])
@@ -488,7 +488,7 @@ export default function ProfilingResults({
       <div className="mt-8">
         <Button
           size="lg"
-          onClick={onComplete}
+          onClick={() => onComplete(result.stage)}
           className="shimmer-overlay group w-full animate-pulse-glow rounded-2xl text-base font-semibold"
         >
           Ke Papan Pemuka

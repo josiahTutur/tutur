@@ -23,7 +23,7 @@ export default function Intro({
   onSkip,
 }: {
   onComplete: () => void
-  /** Demo shortcut: skip sign-in/profiling and jump to the dashboard. */
+  /** Top-right "Log Masuk" — goes straight to the sign-in page. */
   onSkip: () => void
 }) {
   // The face assembles first, then the messages begin cycling above it.
@@ -50,7 +50,7 @@ export default function Intro({
 
   return (
     <main className="relative flex min-h-screen flex-col px-7 pb-10 pt-12">
-      {/* Brand mark + demo skip */}
+      {/* Brand mark + sign-in */}
       <div className="mb-6 flex animate-fade-in items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl glass-strong shadow-glow-cyan">
@@ -61,9 +61,9 @@ export default function Intro({
         <button
           type="button"
           onClick={onSkip}
-          className="rounded-full glass px-3.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+          className="rounded-full glass px-3.5 py-1.5 text-xs font-medium text-foreground/80 transition-colors hover:text-foreground"
         >
-          Langkau →
+          Log Masuk
         </button>
       </div>
 

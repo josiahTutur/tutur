@@ -35,6 +35,11 @@ import ActivityLibrary, {
   ActivityBoardModal,
   type ActivityRecord,
 } from "@/components/ActivityLibrary"
+import {
+  loadTodayCompletions,
+  insertCompletion,
+  updateCompletion,
+} from "@/lib/db"
 import AnalysisView from "@/components/AnalysisView"
 import ProfileView from "@/components/ProfileView"
 import SettingsView from "@/components/SettingsView"
@@ -282,11 +287,37 @@ export default function DashboardHub({
   // by the Panduan AI chat, Aktiviti Harian, and Analisis. Completing from any
   // surface updates them all. Key = activity code.
   const [records, setRecords] = useState<Record<string, ActivityRecord>>({})
+
+  // Pull today's saved completions on mount so the calendar + summary reflect
+  // what was already done today (e.g. after a refresh). No-op in the demo (no
+  // signed-in user).
+  useEffect(() => {
+    loadTodayCompletions().then((map) => {
+      if (Object.keys(map).length) setRecords(map)
+    })
+  }, [])
+
   function saveRecord(code: string, note: string, seconds?: number) {
+    const existing = records[code]
+    const secs = seconds ?? existing?.seconds ?? 0
+    // Optimistic local update first…
     setRecords((prev) => ({
       ...prev,
-      [code]: { note, seconds: seconds ?? prev[code]?.seconds ?? 0 },
+      [code]: { note, seconds: secs, id: existing?.id },
     }))
+    // …then persist: insert on first completion, update on an edit/redo.
+    void (async () => {
+      if (existing?.id) {
+        await updateCompletion(existing.id, note, secs)
+      } else {
+        const newId = await insertCompletion(code, note, secs, profile?.stage)
+        if (newId) {
+          setRecords((prev) =>
+            prev[code] ? { ...prev, [code]: { ...prev[code], id: newId } } : prev
+          )
+        }
+      }
+    })()
   }
   const todayCompleted = Object.keys(records).length
   const todaySeconds = Object.values(records).reduce((s, r) => s + r.seconds, 0)

@@ -107,6 +107,7 @@ function toStageCode(stage?: number): StageCode {
 export interface ActivityRecord {
   note: string // the parent's reflection (pemerhatian)
   seconds: number // time spent on the AAC board
+  id?: string // the row id in activity_completions (for editing later)
 }
 
 export default function ActivityLibrary({

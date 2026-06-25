@@ -1,4 +1,12 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { Loader2 } from "lucide-react"
+import { supabase } from "@/lib/supabase"
+import {
+  ensureProfile,
+  loadOnboarding,
+  saveOnboarding,
+  saveProfile,
+} from "@/lib/db"
 import Intro from "@/components/Intro"
 import Auth from "@/components/Auth"
 import OnboardingStory from "@/components/OnboardingStory"
@@ -10,17 +18,19 @@ import ActivitySelection from "@/components/ActivitySelection"
 import DashboardHub from "@/components/DashboardHub"
 import type { Profile } from "@/lib/types"
 
-// Demo profile used by the Intro "Langkau" shortcut to jump straight to the
-// dashboard, bypassing sign-in & profiling while other features are built.
-const DEFAULT_PROFILE: Profile = {
-  childName: "John",
-  childAge: "6 tahun",
-  guardianName: "Deep",
-  relationship: "Bapa",
-  guardianAge: "44 tahun",
-  stage: 1,
-  email: "John@gmail.com",
-  profiledAt: "2026-06-01",
+// Build the profile from the 20 profiling answers. Index mapping (see Chat.tsx):
+//   [0] child age · [1] child name · [2] parent name · [3] relationship · [4] parent age
+function profileFromAnswers(answers: string[], email: string): Profile {
+  return {
+    childAge: answers[0] ?? "",
+    childName: answers[1] ?? "",
+    guardianName: answers[2] ?? "",
+    relationship: answers[3] ?? "",
+    guardianAge: answers[4] ?? "",
+    stage: 1, // replaced once profiling computes the real stage
+    email,
+    profiledAt: new Date().toISOString().slice(0, 10),
+  }
 }
 
 /**
@@ -56,10 +66,6 @@ export type View =
 export default function App() {
   const [view, setView] = useState<View>("intro")
 
-  // Simulated registration flag — a real backend would set this from the
-  // auth response (e.g. "account just created" vs. "existing user").
-  const [isNewUser] = useState(true)
-
   // Raw answers from the 16 profiling questions, handed to the scoring engine.
   const [profilingAnswers, setProfilingAnswers] = useState<string[]>([])
 
@@ -78,6 +84,76 @@ export default function App() {
   // Intervention activities (A1…) the parent curated during onboarding. Scopes
   // the activity library Maya draws from in the hub.
   const [activities, setActivities] = useState<string[]>([])
+
+  // The signed-in user's email — stamped onto the profile built from profiling.
+  const [userEmail, setUserEmail] = useState("")
+
+  // Brief splash while we check the session on first load, so we don't flash the
+  // intro before deciding where a signed-in user belongs.
+  const [booting, setBooting] = useState(true)
+
+  // Supabase session → drives auth + resume. A signed-in user with saved
+  // onboarding lands straight on the hub; a new one continues onboarding.
+  // Signing out returns to the intro.
+  useEffect(() => {
+    let cancelled = false
+
+    async function resume() {
+      await ensureProfile() // guarantee the profile row exists before anything
+      const ob = await loadOnboarding()
+      if (cancelled || !ob) return
+      // Rebuild the profile from saved data so ProfileView shows real values.
+      setProfile({
+        childName: ob.childName ?? "",
+        childAge: ob.childAge ?? "",
+        guardianName: ob.guardianName ?? "",
+        relationship: ob.relationship ?? "",
+        guardianAge: ob.guardianAge ?? "",
+        stage: ob.stage ?? 1,
+        email: ob.email ?? "",
+        profiledAt: ob.profiledAt ?? "",
+      })
+      if (ob.activities.length > 0) {
+        // Onboarding already done → restore selections and jump to the hub.
+        setGoal(ob.goal)
+        setRoutines(ob.routines)
+        setActivities(ob.activities)
+        setView((v) => (v === "intro" || v === "auth" ? "hub" : v))
+      } else {
+        setView((v) => (v === "intro" || v === "auth" ? "story" : v))
+      }
+    }
+
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (data.session) {
+        setUserEmail(data.session.user.email ?? "")
+        await resume()
+      }
+      if (!cancelled) setBooting(false)
+    })
+
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" && session) {
+        setUserEmail(session.user.email ?? "")
+        resume()
+      } else if (event === "SIGNED_OUT") setView("intro")
+    })
+
+    return () => {
+      cancelled = true
+      sub.subscription.unsubscribe()
+    }
+  }, [])
+
+  // Splash while the session check runs, so a signed-in user never sees a flash
+  // of the intro before landing on the hub.
+  if (booting) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
 
   // The goal/routine matrices and hub are full-bleed responsive layouts, so they
   // render outside the mobile-width column used by the rest of the onboarding flow.
@@ -106,8 +182,19 @@ export default function App() {
     return (
       <ActivitySelection
         childStage={profile?.stage}
-        onComplete={(selected) => {
+        onComplete={async (selected) => {
           setActivities(selected)
+          // Persist the finished onboarding so a refresh resumes on the hub.
+          try {
+            await saveOnboarding({
+              goal,
+              routines,
+              activities: selected,
+              stage: profile?.stage,
+            })
+          } catch {
+            /* offline / not signed in (demo) — fall through to the hub anyway */
+          }
           setView("hub")
         }}
         onBack={() => setView("routines")}
@@ -121,10 +208,14 @@ export default function App() {
         goal={goal}
         routines={routines}
         activities={activities}
-        onUpdateProfile={setProfile}
+        onUpdateProfile={(p) => {
+          setProfile(p)
+          void saveProfile(p) // persist edits from the Profile screen
+        }}
         onUpdateGoal={setGoal}
         onUpdateRoutines={setRoutines}
         onSignOut={() => {
+          supabase.auth.signOut()
           setProfile(undefined)
           setGoal(undefined)
           setRoutines([])
@@ -141,16 +232,11 @@ export default function App() {
       {view === "intro" && (
         <Intro
           onComplete={() => setView("auth")}
-          onSkip={() => {
-            setProfile(DEFAULT_PROFILE)
-            setView("goals")
-          }}
+          onSkip={() => setView("auth")}
         />
       )}
 
-      {view === "auth" && (
-        <Auth onVerified={() => setView(isNewUser ? "story" : "chat")} />
-      )}
+      {view === "auth" && <Auth />}
 
       {view === "story" && (
         <OnboardingStory onComplete={() => setView("chat")} />
@@ -160,6 +246,8 @@ export default function App() {
         <Chat
           onComplete={(answers) => {
             setProfilingAnswers(answers)
+            // Capture the child/guardian details from the answers right away.
+            setProfile(profileFromAnswers(answers, userEmail))
             setView("results")
           }}
         />
@@ -168,7 +256,16 @@ export default function App() {
       {view === "results" && (
         <ProfilingResults
           answers={profilingAnswers}
-          onComplete={() => setView("goals")}
+          onComplete={(stage) => {
+            // Finalise the profile with the computed stage and persist it.
+            const finalProfile: Profile = {
+              ...(profile ?? profileFromAnswers(profilingAnswers, userEmail)),
+              stage,
+            }
+            setProfile(finalProfile)
+            void saveProfile(finalProfile, profilingAnswers)
+            setView("goals")
+          }}
         />
       )}
     </div>

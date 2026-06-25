@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { cn } from "@/lib/utils"
+import { supabase } from "@/lib/supabase"
 import {
   ROUTINE_LABELS,
   STAGE_INFO,
@@ -103,6 +104,27 @@ export default function SettingsView({
   const [reminderTime, setReminderTime] = useState("18:00")
   const [weeklySummary, setWeeklySummary] = useState(true)
   const [language, setLanguage] = useState<"ms" | "en">("ms")
+
+  // Set / change account password (so magic-link accounts can use a password).
+  const [newPassword, setNewPassword] = useState("")
+  const [pwLoading, setPwLoading] = useState(false)
+  const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  async function handleSetPassword() {
+    if (newPassword.length < 6) {
+      setPwMsg({ ok: false, text: "Kata laluan mesti sekurang-kurangnya 6 aksara." })
+      return
+    }
+    setPwLoading(true)
+    setPwMsg(null)
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    setPwLoading(false)
+    if (error) {
+      setPwMsg({ ok: false, text: "Gagal menetapkan kata laluan. Sila cuba lagi." })
+      return
+    }
+    setNewPassword("")
+    setPwMsg({ ok: true, text: "Kata laluan berjaya ditetapkan! 🎉" })
+  }
 
   // AAC voice (persisted) — pick female/male and hear a sample on select.
   const [aacVoice, setVoiceState] = useState<AacVoice>(getAacVoice())
@@ -489,6 +511,42 @@ export default function SettingsView({
               )
             })}
           </div>
+        </Section>
+
+        {/* Account password — set one to log in without an email link */}
+        <Section icon={Lock} title="Kata Laluan">
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Tetapkan kata laluan untuk log masuk dengan lebih cepat, tanpa perlu
+            menunggu pautan e-mel.
+          </p>
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="Kata laluan baharu (sekurang-kurangnya 6 aksara)"
+            className="w-full rounded-2xl bg-white/[0.04] px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/80 outline-none focus:ring-2 focus:ring-ring"
+            style={{ boxShadow: `inset 0 0 0 1px hsl(${TEAL} / 0.3)` }}
+          />
+          {pwMsg && (
+            <p
+              className="text-xs font-medium"
+              style={{
+                color: pwMsg.ok ? `hsl(${TEAL})` : "hsl(var(--destructive))",
+              }}
+            >
+              {pwMsg.text}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={handleSetPassword}
+            disabled={pwLoading || newPassword.length < 6}
+            className="w-full rounded-2xl py-3 text-sm font-bold text-background transition-all active:scale-[0.99] disabled:opacity-40"
+            style={{ background: `hsl(${CORAL})` }}
+          >
+            {pwLoading ? "Menyimpan…" : "Tetapkan Kata Laluan"}
+          </button>
         </Section>
       </div>
     </div>
