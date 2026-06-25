@@ -152,7 +152,7 @@ export default function ActivitySelection({
                         : {}),
                     }}
                   >
-                    {/* Top row: checkbox + title + type badge */}
+                    {/* Top row: checkbox + title + day badge */}
                     <div className="flex items-start gap-3">
                       <span
                         className={cn(
@@ -170,18 +170,9 @@ export default function ActivitySelection({
                       <h3 className="flex-1 pt-0.5 text-base font-semibold leading-snug text-foreground">
                         {activity.title}
                       </h3>
-
-                      <span className="shrink-0 rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        {activity.type === "Seasonal" ? "Bermusim" : "Teras"}
-                      </span>
                     </div>
 
-                    {/* Core skill */}
-                    <p className="mt-3 text-xs text-muted-foreground">
-                      {activity.coreSkill}
-                    </p>
-
-                    {/* Metadata — routine (teal) + strategy */}
+                    {/* Routine */}
                     <div className="mt-3 flex flex-wrap gap-1.5">
                       <span
                         className="rounded-full px-2.5 py-1 text-[11px] font-medium"
@@ -192,10 +183,26 @@ export default function ActivitySelection({
                       >
                         {ROUTINE_LABELS[activity.routine] ?? activity.routine}
                       </span>
-                      <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[11px] font-medium text-foreground/80">
-                        {activity.strategyName}
-                      </span>
                     </div>
+
+                    {/* Perlu disediakan — things to prepare for this activity */}
+                    {activity.materials.length > 0 && (
+                      <div className="mt-3">
+                        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          Perlu disediakan
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {activity.materials.map((m) => (
+                            <span
+                              key={m}
+                              className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[11px] font-medium text-foreground/80"
+                            >
+                              {m}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </button>
                 )
               })}

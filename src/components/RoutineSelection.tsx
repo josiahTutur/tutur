@@ -1,7 +1,8 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { ArrowLeft, Check, Sparkles } from "lucide-react"
+import { isRoutineComingSoon } from "@/lib/activities"
+import { ArrowLeft, Check, Lock, Sparkles } from "lucide-react"
 
 /* ========================================================================== *
  *  RoutineSelection — Part 3.6: Daily Routine Selection Matrix
@@ -16,6 +17,7 @@ import { ArrowLeft, Check, Sparkles } from "lucide-react"
 
 const CORAL = "12 100% 64%" // active multi-selection indicator
 const TEAL = "172 66% 50%" // activity-count badges
+const PURPLE = "270 95% 65%" // "coming soon" badge
 
 interface Routine {
   code: string
@@ -104,22 +106,26 @@ export default function RoutineSelection({
           <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {ROUTINES.map((routine, i) => {
               const selected = selectedRoutines.includes(routine.code)
+              const soon = isRoutineComingSoon(routine.code)
               return (
                 <button
                   key={routine.code}
                   type="button"
-                  onClick={() => toggleRoutine(routine.code)}
+                  disabled={soon}
+                  onClick={() => !soon && toggleRoutine(routine.code)}
                   aria-pressed={selected}
                   className={cn(
-                    "group relative flex animate-fade-up flex-col rounded-3xl border p-5 text-left backdrop-blur-xl transition-all duration-200 ease-in-out hover:scale-[1.02]",
-                    selected
-                      ? "bg-white/[0.07]"
-                      : "border-white/10 bg-white/[0.04] hover:border-white/20 hover:shadow-[0_0_32px_-10px_hsl(12_100%_64%/0.4)]"
+                    "group relative flex animate-fade-up flex-col rounded-3xl border p-5 text-left backdrop-blur-xl transition-all duration-200 ease-in-out",
+                    soon
+                      ? "cursor-not-allowed border-white/10 bg-white/[0.02] opacity-55"
+                      : selected
+                        ? "bg-white/[0.07] hover:scale-[1.02]"
+                        : "border-white/10 bg-white/[0.04] hover:scale-[1.02] hover:border-white/20 hover:shadow-[0_0_32px_-10px_hsl(12_100%_64%/0.4)]"
                   )}
                   style={{
                     animationDelay: `${i * 50}ms`,
                     animationFillMode: "both",
-                    ...(selected
+                    ...(selected && !soon
                       ? {
                           borderColor: `hsl(${CORAL} / 0.85)`,
                           boxShadow: `0 0 15px hsl(${CORAL} / 0.5), 0 0 0 1px hsl(${CORAL} / 0.6)`,
@@ -127,17 +133,17 @@ export default function RoutineSelection({
                       : {}),
                   }}
                 >
-                  {/* Top row: checkbox + name + social-proof badge */}
+                  {/* Top row: checkbox + name + badge */}
                   <div className="flex items-start gap-3">
                     <span
                       className={cn(
                         "flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border transition-all duration-200",
-                        selected ? "border-transparent" : "border-white/25"
+                        selected && !soon ? "border-transparent" : "border-white/25"
                       )}
-                      style={selected ? { background: `hsl(${CORAL})` } : undefined}
+                      style={selected && !soon ? { background: `hsl(${CORAL})` } : undefined}
                       aria-hidden
                     >
-                      {selected && (
+                      {selected && !soon && (
                         <Check className="h-4 w-4 text-background" strokeWidth={3} />
                       )}
                     </span>
@@ -146,29 +152,44 @@ export default function RoutineSelection({
                       {routine.name}
                     </h3>
 
-                    {routine.popular && (
+                    {soon ? (
                       <span
-                        className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                        className="flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
                         style={{
-                          background: `hsl(${CORAL} / 0.18)`,
-                          color: `hsl(${CORAL})`,
+                          background: `hsl(${PURPLE} / 0.16)`,
+                          color: `hsl(${PURPLE} / 0.9)`,
                         }}
                       >
-                        🔥 Pilihan Ramai
+                        <Lock className="h-3 w-3" strokeWidth={2.5} />
+                        Akan datang
                       </span>
+                    ) : (
+                      routine.popular && (
+                        <span
+                          className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                          style={{
+                            background: `hsl(${CORAL} / 0.18)`,
+                            color: `hsl(${CORAL})`,
+                          }}
+                        >
+                          🔥 Pilihan Ramai
+                        </span>
+                      )
                     )}
                   </div>
 
-                  {/* Activity count — soft teal tint */}
-                  <span
-                    className="mt-4 w-fit rounded-full px-2.5 py-1 text-xs font-medium"
-                    style={{
-                      background: `hsl(${TEAL} / 0.14)`,
-                      color: `hsl(${TEAL})`,
-                    }}
-                  >
-                    {routine.activities} Aktiviti Tersedia
-                  </span>
+                  {/* Activity count — soft teal tint (hidden for coming-soon) */}
+                  {!soon && (
+                    <span
+                      className="mt-4 w-fit rounded-full px-2.5 py-1 text-xs font-medium"
+                      style={{
+                        background: `hsl(${TEAL} / 0.14)`,
+                        color: `hsl(${TEAL})`,
+                      }}
+                    >
+                      {routine.activities} Aktiviti Tersedia
+                    </span>
+                  )}
                 </button>
               )
             })}

@@ -12,8 +12,11 @@ const LINES = [
   "Tutur tunjuk caranya, saat demi saat.",
 ]
 
-// The portrait assembles first; the story particles begin once it's formed.
-const FACE_INTRO = 2600
+// Maya's greeting, typed out over the same window the face assembles in.
+const GREETING = "Hai, saya Maya AI"
+const GREETING_DURATION = 3000
+// Pause after the greeting finishes before the story begins.
+const STORY_DELAY = 700
 
 export default function Intro({
   onComplete,
@@ -26,11 +29,24 @@ export default function Intro({
   // The face assembles first, then the messages begin cycling above it.
   const [storyStarted, setStoryStarted] = useState(false)
   const [storyDone, setStoryDone] = useState(false)
+  // Typewriter — types Maya's greeting in step with the face assembling.
+  const [typed, setTyped] = useState(0)
 
   useEffect(() => {
-    const id = setTimeout(() => setStoryStarted(true), FACE_INTRO)
+    if (typed >= GREETING.length) return
+    const id = setTimeout(
+      () => setTyped((t) => t + 1),
+      GREETING_DURATION / GREETING.length
+    )
     return () => clearTimeout(id)
-  }, [])
+  }, [typed])
+
+  // The story begins only after the greeting has finished typing.
+  useEffect(() => {
+    if (typed < GREETING.length) return
+    const id = setTimeout(() => setStoryStarted(true), STORY_DELAY)
+    return () => clearTimeout(id)
+  }, [typed])
 
   return (
     <main className="relative flex min-h-screen flex-col px-7 pb-10 pt-12">
@@ -68,12 +84,25 @@ export default function Intro({
         <div className="h-[42vh] w-full max-w-sm">
           <ParticleFace className="h-full w-full" />
         </div>
+
+        {/* Maya's greeting — typed out directly below the portrait */}
+        <p
+          className="mt-2 text-center text-lg font-semibold tracking-tight text-gradient"
+          aria-label={GREETING}
+        >
+          {GREETING.slice(0, typed)}
+          {typed < GREETING.length && (
+            <span className="ml-0.5 animate-pulse font-normal text-foreground/60">
+              |
+            </span>
+          )}
+        </p>
       </div>
 
       {/* Glowing CTA — fades up after the story has played out */}
       <div
         className={[
-          "mt-8 transition-all duration-700",
+          "mt-10 transition-all duration-700",
           storyDone
             ? "translate-y-0 opacity-100"
             : "pointer-events-none translate-y-4 opacity-0",

@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import {
   Bot,
   Bell,
+  Check,
   User,
   Settings,
   ArrowUp,
+  Lock,
   Play,
   LayoutGrid,
   BrainCircuit,
@@ -21,6 +23,7 @@ import { cn } from "@/lib/utils"
 import type { Profile } from "@/lib/types"
 import {
   ACTIVITIES,
+  AAC_STAGES,
   ROUTINE_LABELS,
   STAGE_INFO,
   STAGE_ORDER,
@@ -28,7 +31,10 @@ import {
   type AacWord,
   type StageCode,
 } from "@/lib/activities"
-import ActivityLibrary from "@/components/ActivityLibrary"
+import ActivityLibrary, {
+  ActivityBoardModal,
+  type ActivityRecord,
+} from "@/components/ActivityLibrary"
 import AnalysisView from "@/components/AnalysisView"
 import ProfileView from "@/components/ProfileView"
 import SettingsView from "@/components/SettingsView"
@@ -58,6 +64,8 @@ import SettingsView from "@/components/SettingsView"
 const CORAL = "12 100% 64%" // primary triggers / active nav
 const TEAL = "172 66% 50%" // health / progress metrics
 const CYAN = "187 100% 50%" // Maya's AI identity halo
+const PURPLE = "270 95% 65%" // Papan AAC accent
+const PURPLE_TEXT = "270 95% 84%"
 
 /* -------------------------------------------------------------------------- */
 /*  Navigation model                                                          */
@@ -89,17 +97,20 @@ const VIEW_TITLES: Record<NavId, string> = {
 
 // "notification" has no nav entry — it's reached via the bell beside the
 // profile at the bottom of the rail.
-const NAV_ITEMS = [
-  { id: "ai", label: "Panduan AI", icon: BrainCircuit },
-  { id: "aktiviti", label: "Aktiviti Harian", icon: Library },
-  { id: "aac", label: "Papan", icon: LayoutGrid },
-  { id: "analysis", label: "Analisis", icon: BarChart3 },
-  { id: "setting", label: "Tetapan", icon: Settings },
-] as const satisfies ReadonlyArray<{
+const NAV_ITEMS: ReadonlyArray<{
   id: NavId
   label: string
   icon: typeof Bot
-}>
+  /** Marks a not-yet-ready destination — shows an "Akan Datang" chip + a
+   *  blurred teaser view instead of the real page. */
+  comingSoon?: boolean
+}> = [
+  { id: "aktiviti", label: "Aktiviti Harian", icon: Library },
+  { id: "ai", label: "Panduan AI", icon: BrainCircuit },
+  { id: "aac", label: "Papan", icon: LayoutGrid },
+  { id: "analysis", label: "Analisis", icon: BarChart3, comingSoon: true },
+  { id: "setting", label: "Tetapan", icon: Settings },
+]
 
 /* -------------------------------------------------------------------------- */
 /*  Static placeholder content (pre-backend)                                  */
@@ -264,11 +275,21 @@ export default function DashboardHub({
   /** Clears the session and returns to the start of the flow. */
   onSignOut?: () => void
 }) {
-  const [activeNav, setActiveNav] = useState<NavId>("ai")
+  const [activeNav, setActiveNav] = useState<NavId>("aktiviti")
   const [menuOpen, setMenuOpen] = useState(false) // mobile drawer
-  // Activities completed today — shared so Aktiviti Harian & Analisis calendars
-  // show the same "today" state.
-  const [todayCompleted, setTodayCompleted] = useState(0)
+
+  // Completed activities → reflection + time, the single source of truth shared
+  // by the Panduan AI chat, Aktiviti Harian, and Analisis. Completing from any
+  // surface updates them all. Key = activity code.
+  const [records, setRecords] = useState<Record<string, ActivityRecord>>({})
+  function saveRecord(code: string, note: string, seconds?: number) {
+    setRecords((prev) => ({
+      ...prev,
+      [code]: { note, seconds: seconds ?? prev[code]?.seconds ?? 0 },
+    }))
+  }
+  const todayCompleted = Object.keys(records).length
+  const todaySeconds = Object.values(records).reduce((s, r) => s + r.seconds, 0)
 
   const guardianName = profile?.guardianName ?? "[Nama Penjaga]"
   const relationship = profile?.relationship ?? "Penjaga"
@@ -334,6 +355,7 @@ export default function DashboardHub({
           title={VIEW_TITLES[activeNav]}
           showStatus={activeNav === "ai"}
           onOpenMenu={() => setMenuOpen(true)}
+          onOpenAi={() => setActiveNav("ai")}
         />
 
         <div className="relative min-h-0 flex-1">
@@ -343,6 +365,8 @@ export default function DashboardHub({
               childName={profile?.childName?.trim() || "anak anda"}
               childStage={profile?.stage}
               activityCodes={activities}
+              records={records}
+              onSaveRecord={saveRecord}
             />
           </ViewLayer>
 
@@ -352,7 +376,8 @@ export default function DashboardHub({
               relationship={profile?.relationship}
               routines={routines}
               activityCodes={activities}
-              onTodayCompletedChange={setTodayCompleted}
+              records={records}
+              onSaveRecord={saveRecord}
             />
           </ViewLayer>
 
@@ -368,11 +393,21 @@ export default function DashboardHub({
           </ViewLayer>
 
           <ViewLayer visible={activeNav === "analysis"}>
-            <AnalysisView
-              profile={profile}
-              goal={goal}
-              todayCompleted={todayCompleted}
-            />
+            {/* Coming soon — a blurred teaser of the analytics behind an overlay */}
+            <div className="relative h-full overflow-hidden">
+              <div
+                className="pointer-events-none h-full select-none blur-md"
+                aria-hidden
+              >
+                <AnalysisView
+                  profile={profile}
+                  goal={goal}
+                  todayCompleted={todayCompleted}
+                  todaySeconds={todaySeconds}
+                />
+              </div>
+              <ComingSoonOverlay />
+            </div>
           </ViewLayer>
 
           <ViewLayer visible={activeNav === "notification"}>
@@ -469,7 +504,7 @@ function NavRail({
 
       {/* Primary navigation */}
       <nav className="mt-8 flex-1 space-y-1.5">
-        {NAV_ITEMS.map(({ id, label, icon: Icon }) => {
+        {NAV_ITEMS.map(({ id, label, icon: Icon, comingSoon }) => {
           const active = activeNav === id
           return (
             <button
@@ -496,7 +531,18 @@ function NavRail({
                 className="h-5 w-5 shrink-0"
                 style={active ? { color: `hsl(${CORAL})` } : undefined}
               />
-              {label}
+              <span className="flex-1 text-left">{label}</span>
+              {comingSoon && (
+                <span
+                  className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide"
+                  style={{
+                    background: `hsl(${PURPLE} / 0.18)`,
+                    color: `hsl(${PURPLE_TEXT})`,
+                  }}
+                >
+                  Akan Datang
+                </span>
+              )}
             </button>
           )
         })}
@@ -618,17 +664,27 @@ function TopBar({
   title,
   showStatus,
   onOpenMenu,
+  onOpenAi,
 }: {
   title: string
   showStatus: boolean
   onOpenMenu: () => void
+  /** Tapping the Maya logo opens the Panduan AI chat. */
+  onOpenAi: () => void
 }) {
   return (
     <header className="z-20 flex shrink-0 items-center gap-3 border-b border-border/60 bg-background/70 px-4 py-3.5 backdrop-blur-xl md:px-5">
       <MenuButton onOpenMenu={onOpenMenu} />
 
-      {/* Desktop-only logo on the left */}
-      <MayaAvatar className="hidden h-10 w-10 md:flex" />
+      {/* Desktop-only logo on the left → opens Panduan AI */}
+      <button
+        type="button"
+        onClick={onOpenAi}
+        aria-label="Buka Panduan AI"
+        className="hidden shrink-0 rounded-full transition-transform hover:scale-105 active:scale-95 md:block"
+      >
+        <MayaAvatar className="h-10 w-10" />
+      </button>
 
       <div className="min-w-0 flex-1 text-center md:text-left">
         <h1 className="truncate text-base font-semibold tracking-tight">
@@ -645,8 +701,15 @@ function TopBar({
         )}
       </div>
 
-      {/* Mobile-only logo, moved to the far right */}
-      <MayaAvatar className="h-9 w-9 md:hidden" />
+      {/* Mobile-only logo, far right → opens Panduan AI */}
+      <button
+        type="button"
+        onClick={onOpenAi}
+        aria-label="Buka Panduan AI"
+        className="shrink-0 rounded-full transition-transform hover:scale-105 active:scale-95 md:hidden"
+      >
+        <MayaAvatar className="h-9 w-9" />
+      </button>
     </header>
   )
 }
@@ -673,6 +736,36 @@ function MayaAvatar({ className }: { className?: string }) {
 /*  AI — Generative Chat Interface                                            */
 /* -------------------------------------------------------------------------- */
 
+/** Warm, understanding nudges shown when a parent quits an activity early.
+ *  One is picked at random so it never feels like a canned repeat. */
+const QUIT_NUDGES = [
+  "Tak apa, ambil masa anda. 💛 Bila dah bersedia, tekan 'Mula aktiviti' untuk sambung semula.",
+  "Kadang-kadang anak belum bersedia — itu sangat normal. Cuba lagi bila suasana lebih tenang, ya. 🌱",
+  "Hari yang sibuk? Saya faham. Aktiviti ini akan tunggu anda di sini. ☕",
+  "Tak perlu sempurna — yang penting anda cuba. Sambung bila-bila masa. 🌟",
+  "Mungkin sekarang bukan masa terbaik, dan itu okay. Kita boleh cuba lagi nanti. 💛",
+  "Berehat seketika tak salah. Anak anda bertuah ada anda yang ambil berat. 🤗",
+  "Langkah demi langkah. Bila anda dah sedia, saya ada di sini untuk bantu. 👣",
+  "Anak rewel atau penat? Kita boleh tangguh dulu — tiada paksaan. 🌸",
+  "Anda dah ambil langkah pertama, dan itu pun dah bermakna. Jumpa lagi bila bersedia! ✨",
+  "Setiap usaha kecil tetap dikira. Jom sambung bila anda dan anak dah bersedia. 💪",
+]
+
+/** Shown when a parent reopens an already-completed activity — praising their
+ *  drive to practise more with their child. One picked at random. */
+const REPRACTICE_INTROS = [
+  "Hebat! Anda dah selesai aktiviti ini, dan nak berlatih lagi — itu semangat terbaik untuk anak! 🌟",
+  "Bagus sungguh! Ulangan adalah kunci — setiap kali anda berlatih, anak semakin faham. Jom buat sekali lagi! 💪",
+  "Saya suka semangat ini! Lebih banyak latihan bersama anak, lebih kukuh kemahiran mereka. 💛",
+  "Anak belajar melalui pengulangan. Dengan kembali ke sini, anda beri mereka peluang terbaik. 🌱",
+  "Wah, datang lagi! Konsistensi seperti inilah yang membantu anak berkembang. Teruskan usaha murni ini. ✨",
+  "Setiap kali anda ulang, anak semakin yakin. Jom praktis sekali lagi bersama-sama! 🤗",
+  "Latihan tambahan? Itu hadiah terbaik untuk anak anda. Saya bangga dengan komitmen anda. 🎯",
+  "Tiada had untuk berlatih — lebih kerap, lebih baik. Jom ulang aktiviti ini bersama anak. 🔁",
+  "Anda memang penjaga yang komited. Mari kukuhkan lagi kemahiran anak dengan ulangan ini. 💫",
+  "Sekali lagi? Sempurna! Otak anak menyerap paling banyak melalui ulangan yang menyeronokkan. 🧠",
+]
+
 /** Time-of-day Malay greeting + a matching emoji. */
 function timeGreeting(): { text: string; emoji: string } {
   const h = new Date().getHours()
@@ -687,12 +780,18 @@ function ChatInterface({
   childName,
   childStage,
   activityCodes = [],
+  records,
+  onSaveRecord,
 }: {
   guardianName: string
   childName: string
   childStage?: number
   /** Activity codes the parent curated — scopes today's plan. */
   activityCodes?: string[]
+  /** Shared completion records (so chat completions sync everywhere). */
+  records: Record<string, ActivityRecord>
+  /** Save/update a completion record (note + optional seconds). */
+  onSaveRecord: (code: string, note: string, seconds?: number) => void
 }) {
   const greeting = timeGreeting()
 
@@ -707,12 +806,28 @@ function ChatInterface({
   const [selectedCode, setSelectedCode] = useState<string | null>(null)
   const selected = todays.find((a) => a.code === selectedCode) ?? null
 
-  // Local (no-backend) conversation state.
+  // The activity whose Papan AAC board is open over the chat (null = none).
+  const [boardCode, setBoardCode] = useState<string | null>(null)
+  const boardActivity = todays.find((a) => a.code === boardCode) ?? null
+  // After completing, the guide block animates away before it's unmounted.
+  const [collapsing, setCollapsing] = useState(false)
+  // Intro line for an already-completed activity (praises practising more).
+  const [repracticeIntro, setRepracticeIntro] = useState<string | null>(null)
+  // Tells a board close apart: completion (handled) vs quitting (needs a nudge).
+  const completedRef = useRef(false)
+  // Id of the latest "didn't finish" nudge, so it can be cleared once the parent
+  // moves on (picks another activity / reopens the board).
+  const quitNudgeRef = useRef<number | null>(null)
+
+  // Maya's follow-up messages (completion praise, gentle quit nudges).
   const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [input, setInput] = useState("")
-  const [isTyping, setIsTyping] = useState(false)
   const msgId = useRef(0)
   const scrollRef = useRef<HTMLDivElement>(null)
+  // Scroll-to-top button — appears once the parent has scrolled down a little.
+  const [showScrollTop, setShowScrollTop] = useState(false)
+  function scrollToTop() {
+    scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })
+  }
 
   // Reveal the scripted intro one message at a time (~1s apart) so it lands like
   // a real conversation instead of all at once: greeting → plan → activities.
@@ -734,7 +849,7 @@ function ChatInterface({
     setSelStep(0)
     if (!selectedCode) return
     const activity = todays.find((a) => a.code === selectedCode)
-    const total = activity?.video ? 4 : 3
+    const total = activity?.video ? 3 : 2
     const timers = Array.from({ length: total }, (_, i) =>
       window.setTimeout(() => setSelStep(i + 1), (i + 1) * 800)
     )
@@ -745,38 +860,66 @@ function ChatInterface({
   useEffect(() => {
     const el = scrollRef.current
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" })
-  }, [messages, isTyping, selectedCode, revealStep, selStep])
+  }, [messages, selectedCode, revealStep, selStep])
 
-  function send(text: string) {
-    const trimmed = text.trim()
-    if (!trimmed || isTyping) return
+  // Completing the activity from its in-chat board: record it (syncs to Aktiviti
+  // Harian & Analisis), animate the guide away, then have Maya invite the next.
+  function completeFromBoard(note: string, seconds: number) {
+    if (!boardCode) return
+    completedRef.current = true // mark this close as a completion, not a quit
+    onSaveRecord(boardCode, note, seconds)
+    setCollapsing(true) // play the tuck-away animation on the guide block
+    window.setTimeout(() => {
+      setSelectedCode(null) // unmount the guide → back to the activity list
+      setCollapsing(false)
+      setMessages((m) => [
+        ...m,
+        {
+          id: ++msgId.current,
+          role: "maya",
+          text: "Bagus! Selepas ini pilih satu lagi aktiviti dari senarai hari ini di atas. 💛",
+        },
+      ])
+    }, 360)
+  }
 
-    setMessages((m) => [
-      ...m,
-      { id: ++msgId.current, role: "user", text: trimmed },
-    ])
-    setInput("")
-    setIsTyping(true)
+  // Closing the board. If they completed, completeFromBoard already handled it;
+  // otherwise they quit early — leave the guide up and add a warm nudge to
+  // continue when ready.
+  function closeBoard() {
+    setBoardCode(null)
+    if (completedRef.current) {
+      completedRef.current = false
+      return
+    }
+    const id = ++msgId.current
+    quitNudgeRef.current = id
+    const text = QUIT_NUDGES[Math.floor(Math.random() * QUIT_NUDGES.length)]
+    setMessages((m) => [...m, { id, role: "maya", text }])
+  }
 
-    // Simulate Maya "thinking", then answer with a context-aware canned reply.
-    const reply = generateReply(trimmed, { childName, selected })
-    window.setTimeout(
-      () => {
-        setMessages((m) => [
-          ...m,
-          { id: ++msgId.current, role: "maya", text: reply },
-        ])
-        setIsTyping(false)
-      },
-      700 + Math.random() * 700
+  // Drop a stale "didn't finish" nudge once the parent moves on.
+  function clearQuitNudge() {
+    const id = quitNudgeRef.current
+    if (id == null) return
+    quitNudgeRef.current = null
+    setMessages((m) => m.filter((msg) => msg.id !== id))
+  }
+
+  // Pick an activity. Tapping the one already open is a no-op — nothing
+  // re-reveals and no message disappears.
+  function selectActivity(code: string) {
+    if (selectedCode === code) return
+    clearQuitNudge()
+    setSelectedCode(code)
+    // Reopening a completed one opens with a "practise more" encouragement.
+    setRepracticeIntro(
+      records[code]
+        ? REPRACTICE_INTROS[Math.floor(Math.random() * REPRACTICE_INTROS.length)]
+        : null
     )
   }
 
-  const chips = [
-    "💡 Berikan tips untuk aktiviti ini",
-    "🗣️ Bagaimana saya tahu jika anak faham?",
-    "⏭️ Tunjuk aktiviti seterusnya",
-  ]
 
   return (
     <div className="flex h-full flex-col">
@@ -784,7 +927,8 @@ function ChatInterface({
       <div className="relative min-h-0 flex-1">
         <div
           ref={scrollRef}
-          className="mx-auto h-full max-w-2xl space-y-5 overflow-y-auto px-4 pb-36 pt-6 md:px-6"
+          onScroll={(e) => setShowScrollTop(e.currentTarget.scrollTop > 240)}
+          className="mx-auto h-full max-w-2xl space-y-5 overflow-y-auto px-4 pb-24 pt-6 md:px-6"
         >
           {/* Message 1 — time-based greeting addressing the parent */}
           {revealStep >= 1 && (
@@ -815,9 +959,8 @@ function ChatInterface({
                   activity={a}
                   index={i}
                   selected={a.code === selectedCode}
-                  onSelect={() =>
-                    setSelectedCode(selectedCode === a.code ? null : a.code)
-                  }
+                  completed={!!records[a.code]}
+                  onSelect={() => selectActivity(a.code)}
                 />
               ))}
             </div>
@@ -826,25 +969,36 @@ function ChatInterface({
           {/* While the intro is still composing, show Maya "typing" */}
           {revealStep < 3 && <TypingBubble />}
 
-          {/* Message 4 — response to the chosen activity, revealed piece by
-              piece (reply → video → coaching → chips) like Maya is composing */}
+          {/* Message 4 — the chosen activity's guide, revealed piece by piece
+              (reply → video → coaching). Tucks away once the activity is done. */}
           {selected &&
             (() => {
               const hasVideo = !!selected.video
               const coachStep = hasVideo ? 3 : 2
-              const chipsStep = hasVideo ? 4 : 3
               return (
-                <>
+                <div
+                  className={cn(
+                    "space-y-5 transition-all duration-300 ease-out",
+                    collapsing &&
+                      "pointer-events-none -translate-y-3 scale-[0.97] opacity-0 blur-[2px]"
+                  )}
+                >
                   {selStep >= 1 && (
                     <Bubble delay={0}>
-                      Pilihan yang bagus! Jom mulakan{" "}
-                      <span className="font-semibold text-foreground">
-                        '{selected.title}'
-                      </span>
-                      .{" "}
-                      {hasVideo
-                        ? "Tonton video panduan ringkas di bawah:"
-                        : "Berikut langkah ringkas untuk anda:"}
+                      {repracticeIntro ? (
+                        repracticeIntro
+                      ) : (
+                        <>
+                          Pilihan yang bagus! Jom mulakan{" "}
+                          <span className="font-semibold text-foreground">
+                            '{selected.title}'
+                          </span>
+                          .{" "}
+                          {hasVideo
+                            ? "Tonton video panduan ringkas, kemudian ikut panduan di bawah:"
+                            : "Berikut panduan penuh untuk anda:"}
+                        </>
+                      )}
                     </Bubble>
                   )}
 
@@ -856,36 +1010,21 @@ function ChatInterface({
                     <ActivityCoachingCard
                       activity={selected}
                       childStage={childStage}
+                      completed={!!records[selected.code]}
+                      onStart={() => {
+                        clearQuitNudge() // reopening clears the stale nudge
+                        setBoardCode(selected.code)
+                      }}
                     />
                   )}
 
-                  {selStep >= chipsStep && (
-                    <div className="flex flex-wrap gap-2 pl-12">
-                      {chips.map((chip, i) => (
-                        <button
-                          key={chip}
-                          type="button"
-                          onClick={() => send(chip)}
-                          className="animate-fade-up rounded-full glass px-3.5 py-2 text-left text-xs font-medium text-foreground/85 transition-all hover:bg-white/[0.09] hover:text-foreground active:scale-[0.98]"
-                          style={{
-                            animationDelay: `${120 + i * 70}ms`,
-                            animationFillMode: "both",
-                            boxShadow: `inset 0 0 22px -16px hsl(${CORAL} / 0.9)`,
-                          }}
-                        >
-                          {chip}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Still composing the rest of the response */}
-                  {selStep < chipsStep && <TypingBubble />}
-                </>
+                  {/* Still composing the guide */}
+                  {selStep < coachStep && <TypingBubble />}
+                </div>
               )
             })()}
 
-          {/* Free-form conversation */}
+          {/* Maya's follow-up messages (completion praise, gentle nudges) */}
           {messages.map((msg) =>
             msg.role === "user" ? (
               <UserBubble key={msg.id}>{msg.text}</UserBubble>
@@ -893,127 +1032,49 @@ function ChatInterface({
               <Bubble key={msg.id}>{msg.text}</Bubble>
             )
           )}
-          {isTyping && <TypingBubble />}
         </div>
 
-        {/* Floating chat input tray — typing only */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-5 md:px-6">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault()
-              send(input)
-            }}
-            className="pointer-events-auto mx-auto flex max-w-2xl items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] py-2 pl-5 pr-2 shadow-[0_12px_40px_-12px_hsl(240_60%_2%/0.9)] backdrop-blur-2xl"
-          >
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              aria-label={`Tanya Maya, ${guardianName}`}
-              placeholder="Tanya Maya tentang aktiviti hari ini…"
-              className="min-w-0 flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/80 focus:outline-none"
-            />
-
-            <button
-              type="submit"
-              aria-label="Hantar"
-              disabled={!input.trim() || isTyping}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-background transition-transform active:scale-95 disabled:opacity-40"
-              style={{
-                background: `hsl(${CORAL})`,
-                boxShadow: `0 0 18px -2px hsl(${CORAL} / 0.7)`,
-              }}
-            >
-              <ArrowUp className="h-5 w-5" strokeWidth={2.5} />
-            </button>
-          </form>
-        </div>
+        {/* Scroll-to-top — chat only, hidden while the board modal is open so it
+            never sits over a popup. Fades in once scrolled down. */}
+        <button
+          type="button"
+          aria-label="Skrol ke atas"
+          onClick={scrollToTop}
+          className={cn(
+            "absolute bottom-5 right-4 z-20 flex h-11 w-11 items-center justify-center rounded-full glass-strong text-foreground/80 shadow-lg transition-all hover:text-foreground active:scale-95 md:right-6",
+            showScrollTop && !boardCode
+              ? "translate-y-0 opacity-100"
+              : "pointer-events-none translate-y-2 opacity-0"
+          )}
+          style={{ boxShadow: `0 8px 24px -8px hsl(${CORAL} / 0.5)` }}
+        >
+          <ArrowUp className="h-5 w-5" strokeWidth={2.5} />
+        </button>
       </div>
+
+      {/* Papan AAC board — opened from a guide's "Mula aktiviti" button so the
+          parent can complete the activity without leaving the conversation. */}
+      {boardActivity && boardCode && (
+        <ActivityBoardModal
+          activity={boardActivity}
+          completed={!!records[boardCode]}
+          initialNote={records[boardCode]?.note ?? ""}
+          onSaveRecord={completeFromBoard}
+          onClose={closeBoard}
+        />
+      )}
     </div>
   )
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Chat message model + canned "AI" responder (no backend)                   */
+/*  Chat message model                                                        */
 /* -------------------------------------------------------------------------- */
 
 interface ChatMessage {
   id: number
   role: "user" | "maya"
   text: string
-}
-
-/** Pick a reply at random for variety, so repeats feel less scripted. */
-function pick(options: string[]): string {
-  return options[Math.floor(Math.random() * options.length)]
-}
-
-/**
- * Heuristic, keyword-driven responder that mimics an AI coach. Purely local —
- * swap this for a real model call when a backend exists.
- */
-function generateReply(
-  text: string,
-  ctx: { childName: string; selected: Activity | null }
-): string {
-  const t = text.toLowerCase()
-  const name = ctx.childName
-  const act = ctx.selected?.title
-
-  if (/(hai|helo|hello|salam|selamat)/.test(t)) {
-    return pick([
-      `Hai! Saya Maya, pembantu AI anda. Apa yang boleh saya bantu untuk ${name} hari ini?`,
-      `Helo! Gembira dapat membantu. Ada apa-apa tentang ${name} yang anda ingin bincangkan?`,
-    ])
-  }
-
-  if (/(tips|tip|cara|macam mana|bagaimana|galak)/.test(t)) {
-    return pick([
-      `${act ? `Untuk '${act}', cuba` : "Cuba"} ikut rentak ${name} — modelkan perkataan mudah dan tunggu 5 saat untuk beri ruang dia mencuba. Pujian kecil setiap percubaan amat membantu!`,
-      `Tip ringkas: kurangkan soalan, tambah komen. Contohnya sebut "Wah, kotak besar!" dan biarkan ${name} menyambung. Ulang perkataan yang dia sebut dan panjangkan sedikit.`,
-    ])
-  }
-
-  if (/(faham|understand|tahu)/.test(t)) {
-    return pick([
-      `Anda boleh tahu ${name} faham apabila dia bertindak balas — pandang objek, tunjuk, ikut arahan ringkas, atau cuba sebut semula. Tak perlu sempurna; respons kecil pun kiraan.`,
-      `Perhatikan isyarat: kontak mata, senyum, menunjuk, atau membuat bunyi. Itu tanda ${name} sedang memproses dan cuba berkomunikasi.`,
-    ])
-  }
-
-  if (/(tak nak|degil|menangis|marah|tantrum|frust)/.test(t)) {
-    return pick([
-      `Tak mengapa — itu normal. Berhenti seketika, turunkan tekanan, dan cuba semula bila ${name} lebih tenang. Jadikan ia main, bukan ujian. 💛`,
-      `Cuba ikut minat ${name} dahulu. Kalau dia menolak aktiviti, sambung dengan benda yang dia suka, kemudian selitkan perkataan sasaran secara santai.`,
-    ])
-  }
-
-  if (/(seterus|next|lepas ni|selepas)/.test(t)) {
-    return pick([
-      `Bagus! Selepas ini, pilih satu lagi aktiviti dari senarai hari ini. 3 aktiviti × 5 minit sudah memadai untuk dos harian 15 minit.`,
-      `Langkah seterusnya: ulang aktiviti yang sama esok untuk pengukuhan, atau cuba aktiviti baharu dalam rutin berbeza supaya ${name} belajar merentas situasi.`,
-    ])
-  }
-
-  if (/(video|tonton)/.test(t)) {
-    return act
-      ? `Video untuk '${act}' menunjukkan cara melakukannya langkah demi langkah. Tonton dahulu, kemudian cuba bersama ${name}.`
-      : `Pilih satu aktiviti di atas — jika ada video panduan, ia akan dipaparkan untuk anda tonton.`
-  }
-
-  if (/(terima kasih|tq|thanks|thank)/.test(t)) {
-    return pick([
-      "Sama-sama! Saya sentiasa di sini bila anda perlukan bantuan. 🌟",
-      `Sama-sama! Teruskan usaha — konsistensi anda buat perbezaan besar untuk ${name}.`,
-    ])
-  }
-
-  // Fallback — acknowledge + nudge forward.
-  return pick([
-    `Saya faham. Boleh ceritakan sedikit lagi supaya saya boleh cadangkan langkah terbaik untuk ${name}?`,
-    `Nota diterima! Untuk hari ini, fokus pada satu aktiviti dan raikan setiap percubaan kecil ${name}.`,
-    `Soalan yang baik. Cuba aktiviti hari ini dahulu, dan beritahu saya bagaimana respons ${name} — kita boleh laraskan dari situ.`,
-  ])
 }
 
 /** A left-aligned Maya message bubble with avatar. */
@@ -1080,11 +1141,14 @@ function ActivityChoiceCard({
   activity,
   index,
   selected,
+  completed,
   onSelect,
 }: {
   activity: Activity
   index: number
   selected: boolean
+  /** Already completed today — shows a teal done state. */
+  completed: boolean
   onSelect: () => void
 }) {
   return (
@@ -1106,12 +1170,16 @@ function ActivityChoiceCard({
           : {}),
       }}
     >
-      {/* Step number */}
+      {/* Step number — turns into a teal check once completed */}
       <span
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold"
-        style={{ background: `hsl(${CORAL} / 0.16)`, color: `hsl(${CORAL})` }}
+        style={
+          completed
+            ? { background: `hsl(${TEAL} / 0.18)`, color: `hsl(${TEAL})` }
+            : { background: `hsl(${CORAL} / 0.16)`, color: `hsl(${CORAL})` }
+        }
       >
-        {index + 1}
+        {completed ? <Check className="h-4 w-4" strokeWidth={3} /> : index + 1}
       </span>
 
       {/* Title + meta */}
@@ -1120,14 +1188,23 @@ function ActivityChoiceCard({
           <span className="truncate text-sm font-semibold text-foreground">
             {activity.title}
           </span>
-          {activity.video && (
+          {completed ? (
             <span
-              className="flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+              className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
               style={{ background: `hsl(${TEAL} / 0.16)`, color: `hsl(${TEAL})` }}
             >
-              <Play className="h-2.5 w-2.5" fill="currentColor" />
-              Video
+              Selesai
             </span>
+          ) : (
+            activity.video && (
+              <span
+                className="flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+                style={{ background: `hsl(${TEAL} / 0.16)`, color: `hsl(${TEAL})` }}
+              >
+                <Play className="h-2.5 w-2.5" fill="currentColor" />
+                Video
+              </span>
+            )
           )}
         </span>
         <span className="mt-0.5 block truncate text-xs text-muted-foreground">
@@ -1197,25 +1274,39 @@ function ActivityVideoCard({ activity }: { activity: Activity }) {
 function ActivityCoachingCard({
   activity,
   childStage,
+  completed,
+  onStart,
 }: {
   activity: Activity
   childStage?: number
+  /** Already completed today — relabels the start button. */
+  completed: boolean
+  /** Open the Papan AAC board to do the activity. */
+  onStart: () => void
 }) {
   const stageCode = toStageCode(childStage)
   const content =
     activity.stages.find((s) => s.stage === stageCode) ?? activity.stages[0]
+  // AAC is modeled (Aided Language Input) at the earlier stages.
+  const isAac = AAC_STAGES.includes(stageCode)
 
   return (
     <div
-      className="ml-12 max-w-md animate-fade-up space-y-3 rounded-3xl glass-strong p-4"
+      className="ml-12 max-w-md animate-fade-up space-y-3.5 rounded-3xl glass-strong p-4"
       style={{ animationDelay: "120ms", animationFillMode: "both" }}
     >
+      {/* Situasi (set-up) */}
+      {activity.setup && (
+        <GuideField label="Situasi">
+          <p className="text-sm leading-relaxed text-foreground/90">
+            {activity.setup}
+          </p>
+        </GuideField>
+      )}
+
       {/* Materials */}
-      <div>
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Bahan diperlukan
-        </p>
-        <div className="mt-1.5 flex flex-wrap gap-1.5">
+      <GuideField label="Bahan diperlukan">
+        <div className="flex flex-wrap gap-1.5">
           {activity.materials.map((m) => (
             <span
               key={m}
@@ -1226,30 +1317,100 @@ function ActivityCoachingCard({
             </span>
           ))}
         </div>
-      </div>
+      </GuideField>
 
-      {/* Stage-specific instructions */}
-      {content && (
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Cara buat
-          </p>
-          <p className="mt-1 text-sm leading-relaxed text-foreground/90">
-            {content.instructions}
-          </p>
-          {content.dialogue.length > 0 && (
-            <p
-              className="mt-2 rounded-xl px-3 py-2 text-xs italic"
-              style={{
-                background: `hsl(${CORAL} / 0.08)`,
-                color: "hsl(var(--foreground) / 0.85)",
-              }}
-            >
-              💬 “{content.dialogue[0]}”
-            </p>
-          )}
-        </div>
+      {/* Model AAC — Aided Language Input (the words the parent demonstrates) */}
+      {isAac && activity.aacWords.length > 0 && (
+        <GuideField label="Model AAC (Aided Language Input)">
+          <div className="flex flex-wrap gap-1.5">
+            {activity.aacWords.map((w) => (
+              <span
+                key={w.label}
+                className="flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium"
+                style={{
+                  background: `hsl(${PURPLE} / 0.16)`,
+                  color: `hsl(${PURPLE_TEXT})`,
+                }}
+              >
+                <span aria-hidden>{w.emoji}</span>
+                {w.label}
+              </span>
+            ))}
+          </div>
+        </GuideField>
       )}
+
+      {content && (
+        <>
+          {/* Arahan (instructions) */}
+          <GuideField label="Arahan">
+            <p className="text-sm leading-relaxed text-foreground/90">
+              {content.instructions}
+            </p>
+          </GuideField>
+
+          {/* Skrip dialog — all lines */}
+          {content.dialogue.length > 0 && (
+            <GuideField label="Skrip dialog">
+              <div className="space-y-1.5">
+                {content.dialogue.map((line, i) => (
+                  <p
+                    key={i}
+                    className="rounded-xl px-3 py-2 text-xs italic"
+                    style={{
+                      background: `hsl(${CORAL} / 0.08)`,
+                      color: "hsl(var(--foreground) / 0.85)",
+                    }}
+                  >
+                    💬 “{line}”
+                  </p>
+                ))}
+              </div>
+            </GuideField>
+          )}
+
+          {/* Isyarat anak yang dicari (target signal) */}
+          {content.targetSignal && (
+            <GuideField label="Isyarat anak yang dicari">
+              <p className="text-sm leading-relaxed text-foreground/90">
+                🎯 {content.targetSignal}
+              </p>
+            </GuideField>
+          )}
+        </>
+      )}
+
+      {/* Do it now — opens the Papan AAC board without leaving the chat */}
+      <button
+        type="button"
+        onClick={onStart}
+        className="mt-1 flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-sm font-semibold text-background transition-transform active:scale-[0.99]"
+        style={{
+          background: `hsl(${PURPLE})`,
+          boxShadow: `0 0 24px -6px hsl(${PURPLE} / 0.7)`,
+        }}
+      >
+        <LayoutGrid className="h-4 w-4" />
+        {completed ? "Buka semula Papan AAC" : "Mula aktiviti"}
+      </button>
+    </div>
+  )
+}
+
+/** A labelled field block in the chat coaching guide. */
+function GuideField({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <div>
+      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </p>
+      {children}
     </div>
   )
 }
@@ -1575,6 +1736,44 @@ function AacBoard({ onExit }: { onExit?: () => void }) {
 /* -------------------------------------------------------------------------- */
 /*  Notifikasi / Tetapan — lightweight placeholder views                      */
 /* -------------------------------------------------------------------------- */
+
+/** Centered "Akan Datang" card shown over a blurred teaser of a locked page. */
+function ComingSoonOverlay() {
+  return (
+    <div className="absolute inset-0 flex items-center justify-center p-6">
+      <div
+        className="max-w-xs rounded-3xl glass-strong p-7 text-center"
+        style={{ boxShadow: `0 24px 60px -20px hsl(240 60% 2% / 0.9)` }}
+      >
+        <span
+          className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl"
+          style={{
+            background: `hsl(${PURPLE} / 0.18)`,
+            boxShadow: `0 0 32px -6px hsl(${PURPLE} / 0.6)`,
+          }}
+        >
+          <Lock className="h-6 w-6" style={{ color: `hsl(${PURPLE_TEXT})` }} />
+        </span>
+        <span
+          className="mt-4 inline-block rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wide"
+          style={{
+            background: `hsl(${PURPLE} / 0.18)`,
+            color: `hsl(${PURPLE_TEXT})`,
+          }}
+        >
+          Akan Datang
+        </span>
+        <h2 className="mt-3 text-lg font-bold tracking-tight">
+          Analisis Perkembangan
+        </h2>
+        <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+          Laporan kemajuan terperinci sedang dalam pembangunan. Buat masa ini,
+          teruskan aktiviti harian bersama anak anda. 💛
+        </p>
+      </div>
+    </div>
+  )
+}
 
 function PlaceholderView({
   icon: Icon,

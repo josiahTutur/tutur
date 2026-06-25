@@ -37,3 +37,13 @@ export function currentStreak(): number {
   for (let k = 0; activitiesDoneDaysAgo(k) > 0; k++) streak++
   return streak
 }
+
+/** Human-readable Malay duration, e.g. 95 → "1 minit 35 saat". */
+export function formatDuration(seconds: number): string {
+  if (seconds <= 0) return "0 saat"
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  if (m === 0) return `${s} saat`
+  if (s === 0) return `${m} minit`
+  return `${m} minit ${s} saat`
+}

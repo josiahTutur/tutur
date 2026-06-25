@@ -1,6 +1,10 @@
 import { useState } from "react"
 import { cn } from "@/lib/utils"
-import { activitiesDoneDaysAgo, DAILY_TARGET_ACTIVITIES } from "@/lib/progress"
+import {
+  activitiesDoneDaysAgo,
+  DAILY_TARGET_ACTIVITIES,
+  formatDuration,
+} from "@/lib/progress"
 import { Check } from "lucide-react"
 
 /* ========================================================================== *
@@ -33,7 +37,7 @@ const MS_MONTHS = [
   "Disember",
 ]
 
-type DayStatus = "full" | "partial" | "missed" | "today" | "future"
+type DayStatus = "full" | "partial" | "missed" | "today" | "future" | "none"
 
 const STATUS_PILL: Record<DayStatus, { label: string; hue: string }> = {
   full: { label: "Selesai", hue: TEAL },
@@ -41,14 +45,23 @@ const STATUS_PILL: Record<DayStatus, { label: string; hue: string }> = {
   missed: { label: "Terlepas", hue: CORAL },
   today: { label: "Hari ini", hue: CORAL },
   future: { label: "Akan datang", hue: "0 0% 70%" },
+  none: { label: "Tiada", hue: "0 0% 70%" },
 }
 
 export default function ProgressCalendar({
   todayCompleted,
+  todaySeconds,
+  samplePast = true,
 }: {
   /** Live count of activities completed today; overrides the placeholder so
    *  today's cell colour updates as the parent completes activities. */
   todayCompleted?: number
+  /** Live total seconds spent on today's activities (accumulated). */
+  todaySeconds?: number
+  /** When false, past days carry no placeholder data — they show neutral
+   *  ("Tiada"), never "Terlepas"/"Separa". Used by Aktiviti Harian so the
+   *  calendar reflects only what the parent has really done. */
+  samplePast?: boolean
 }) {
   const now = new Date()
   const year = now.getFullYear()
@@ -69,14 +82,17 @@ export default function ProgressCalendar({
             todayCompleted ?? activitiesDoneDaysAgo(0),
             DAILY_TARGET_ACTIVITIES
           )
-        : activitiesDoneDaysAgo(currentDay - day)
+        : samplePast
+          ? activitiesDoneDaysAgo(currentDay - day)
+          : 0
 
     let status: DayStatus
     if (isFuture) status = "future"
     else if (isToday) status = "today"
     else if (doneCount >= DAILY_TARGET_ACTIVITIES) status = "full"
     else if (doneCount > 0) status = "partial"
-    else status = "missed"
+    // No real history yet → neutral, not a discouraging "Terlepas".
+    else status = samplePast ? "missed" : "none"
 
     return { status, doneCount }
   }
@@ -105,13 +121,22 @@ export default function ProgressCalendar({
         countLine = `0 / ${DAILY_TARGET_ACTIVITIES} aktiviti selesai`
         note = "Hari terlepas — konsistensi harian penting untuk perkembangan anak."
         break
-      case "today":
-        countLine = `${doneCount} / ${DAILY_TARGET_ACTIVITIES} aktiviti selesai setakat ini · ~${minutes} minit`
-        note =
-          remaining > 0
-            ? `${remaining} lagi untuk lengkapkan dos hari ini.`
-            : "Dos hari ini selesai. Syabas!"
+      case "none":
+        countLine = "Tiada aktiviti direkodkan"
+        note = "Belum ada rekod untuk hari ini."
         break
+      case "today": {
+        // Real completed count + accumulated time when available.
+        const realCount = todayCompleted ?? doneCount
+        const timeStr =
+          todaySeconds != null ? formatDuration(todaySeconds) : `~${minutes} minit`
+        countLine = `${realCount} aktiviti selesai · ${timeStr} bersama anak`
+        note =
+          realCount > 0
+            ? "Syabas! Setiap saat bersama anak amat bermakna."
+            : "Belum ada aktiviti selesai hari ini — jom mula!"
+        break
+      }
       default:
         countLine = "Belum bermula"
         note = "Hari akan datang — bersedia untuk aktiviti seterusnya."
@@ -177,7 +202,9 @@ export default function ProgressCalendar({
                 "flex aspect-square items-center justify-center rounded-xl text-xs font-semibold transition-all",
                 isFull && "text-background",
                 isToday && !isFull && !isPartial && "text-foreground",
-                (status === "missed" || status === "future") &&
+                (status === "missed" ||
+                  status === "future" ||
+                  status === "none") &&
                   "bg-white/[0.04] text-muted-foreground",
                 selected && "ring-2 ring-white/70",
                 "hover:brightness-110"
@@ -224,13 +251,15 @@ export default function ProgressCalendar({
           label="Separa"
           style={{ background: `hsl(${TEAL} / 0.22)` }}
         />
-        <LegendSwatch
-          label="Terlepas"
-          style={{
-            background: "hsl(0 0% 100% / 0.04)",
-            boxShadow: `inset 0 0 0 1px hsl(${CORAL} / 0.35)`,
-          }}
-        />
+        {samplePast && (
+          <LegendSwatch
+            label="Terlepas"
+            style={{
+              background: "hsl(0 0% 100% / 0.04)",
+              boxShadow: `inset 0 0 0 1px hsl(${CORAL} / 0.35)`,
+            }}
+          />
+        )}
         <LegendSwatch
           label="Hari ini"
           style={{

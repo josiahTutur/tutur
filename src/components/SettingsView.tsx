@@ -1,8 +1,29 @@
 import { useState } from "react"
 import { cn } from "@/lib/utils"
-import { ROUTINE_LABELS, STAGE_INFO, STAGE_ORDER } from "@/lib/activities"
+import {
+  ROUTINE_LABELS,
+  STAGE_INFO,
+  STAGE_ORDER,
+  isRoutineComingSoon,
+} from "@/lib/activities"
 import { GOALS } from "@/lib/goals"
-import { Bell, Check, Clock, Globe, Lock, Sparkles, Target, X } from "lucide-react"
+import {
+  AAC_VOICE_OPTIONS,
+  getAacVoice,
+  setAacVoice,
+  type AacVoice,
+} from "@/lib/voice"
+import {
+  Bell,
+  Check,
+  Clock,
+  Globe,
+  Lock,
+  Sparkles,
+  Target,
+  Volume2,
+  X,
+} from "lucide-react"
 
 /** Ordered routine list (R1–R10) shared with the onboarding routine picker. */
 const ROUTINE_ENTRIES = Object.entries(ROUTINE_LABELS)
@@ -50,6 +71,8 @@ function formatMalayDate(iso?: string): string {
 
 const CORAL = "12 100% 64%"
 const TEAL = "172 66% 50%"
+const PURPLE = "270 95% 65%"
+const PURPLE_TEXT = "270 95% 84%"
 
 export default function SettingsView({
   stage = 1,
@@ -80,6 +103,18 @@ export default function SettingsView({
   const [reminderTime, setReminderTime] = useState("18:00")
   const [weeklySummary, setWeeklySummary] = useState(true)
   const [language, setLanguage] = useState<"ms" | "en">("ms")
+
+  // AAC voice (persisted) — pick female/male and hear a sample on select.
+  const [aacVoice, setVoiceState] = useState<AacVoice>(getAacVoice())
+  function pickVoice(v: AacVoice) {
+    setVoiceState(v)
+    setAacVoice(v)
+    try {
+      void new Audio(`/audio/activities/aac/${v}/main.mp3`).play().catch(() => {})
+    } catch {
+      /* ignore */
+    }
+  }
 
   // Stage change is gated behind a confirmation popup so it never changes by a
   // single tap. `pendingStage` holds the target chosen inside the dialog.
@@ -187,12 +222,12 @@ export default function SettingsView({
           </div>
         </Section>
 
-        {/* 10 core developmental goals — shared with the onboarding picker */}
-        <Section icon={Target} title="10 Matlamat Perkembangan Teras">
+        {/* Developmental goals — shared with the onboarding picker */}
+        <Section icon={Target} title="Matlamat Perkembangan">
           <div className="flex items-start justify-between gap-3">
             <p className="text-xs leading-relaxed text-muted-foreground">
-              Matlamat utama yang dipilih untuk anak anda. Matlamat aktif
-              menjadi tumpuan Maya — yang lain dibuka setelah ia tercapai.
+              Matlamat aktif menjadi tumpuan Maya. Matlamat lain akan dibuka
+              tidak lama lagi.
             </p>
             <button
               type="button"
@@ -206,9 +241,8 @@ export default function SettingsView({
 
           <ul className="space-y-2">
             {GOALS.map((g, i) => {
-              // None are completed yet — the chosen goal is active, all the
-              // rest stay locked until it is achieved.
               const active = g.code === goal
+              const soon = !!g.comingSoon
               return (
                 <li
                   key={g.code}
@@ -239,7 +273,7 @@ export default function SettingsView({
                   >
                     {g.aspiration}
                   </span>
-                  {active && (
+                  {active ? (
                     <span
                       className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold"
                       style={{
@@ -249,7 +283,17 @@ export default function SettingsView({
                     >
                       Aktif
                     </span>
-                  )}
+                  ) : soon ? (
+                    <span
+                      className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                      style={{
+                        background: `hsl(${PURPLE} / 0.16)`,
+                        color: `hsl(${PURPLE_TEXT})`,
+                      }}
+                    >
+                      Akan datang
+                    </span>
+                  ) : null}
                 </li>
               )
             })}
@@ -385,6 +429,60 @@ export default function SettingsView({
                       }}
                     >
                       Akan datang
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </Section>
+
+        {/* AI voice for the daily-activity Papan AAC */}
+        <Section icon={Volume2} title="Suara AI">
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Pilih suara yang membaca perkataan di Papan AAC aktiviti harian.
+            Ketik untuk dengar contoh.
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {AAC_VOICE_OPTIONS.map((opt) => {
+              const active = aacVoice === opt.id
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => pickVoice(opt.id)}
+                  aria-pressed={active}
+                  className={cn(
+                    "relative flex flex-col items-start gap-0.5 rounded-2xl border px-4 py-3 text-left transition-all",
+                    active
+                      ? "bg-white/[0.06]"
+                      : "border-white/10 hover:border-white/20 hover:bg-white/[0.03]"
+                  )}
+                  style={
+                    active
+                      ? {
+                          borderColor: `hsl(${TEAL} / 0.7)`,
+                          boxShadow: `inset 0 0 0 1px hsl(${TEAL} / 0.4)`,
+                        }
+                      : undefined
+                  }
+                >
+                  <span
+                    className="flex items-center gap-1.5 text-sm font-semibold"
+                    style={active ? { color: `hsl(${TEAL})` } : undefined}
+                  >
+                    <Volume2 className="h-3.5 w-3.5" />
+                    {opt.label}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {opt.description}
+                  </span>
+                  {active && (
+                    <span
+                      className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full"
+                      style={{ background: `hsl(${TEAL})` }}
+                    >
+                      <Check className="h-3 w-3 text-background" strokeWidth={3} />
                     </span>
                   )}
                 </button>
@@ -657,20 +755,24 @@ function GoalChangeDialog({
           {GOALS.map((g) => {
             const selected = g.code === pendingGoal
             const isCurrent = g.code === currentGoal
+            const soon = !!g.comingSoon
             return (
               <button
                 key={g.code}
                 type="button"
-                onClick={() => onPick(g.code)}
+                disabled={soon}
+                onClick={() => !soon && onPick(g.code)}
                 aria-pressed={selected}
                 className={cn(
                   "flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-all",
-                  selected
-                    ? "bg-white/[0.06]"
-                    : "border-white/10 hover:border-white/20 hover:bg-white/[0.03]"
+                  soon
+                    ? "cursor-not-allowed border-white/10 opacity-55"
+                    : selected
+                      ? "bg-white/[0.06]"
+                      : "border-white/10 hover:border-white/20 hover:bg-white/[0.03]"
                 )}
                 style={
-                  selected
+                  selected && !soon
                     ? {
                         borderColor: `hsl(${CORAL} / 0.85)`,
                         boxShadow: `0 0 0 1px hsl(${CORAL} / 0.6)`,
@@ -681,24 +783,37 @@ function GoalChangeDialog({
                 <span
                   className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-sm font-bold"
                   style={
-                    selected
+                    selected && !soon
                       ? { background: `hsl(${CORAL} / 0.18)`, color: `hsl(${CORAL})` }
                       : { background: "hsl(0 0% 100% / 0.05)" }
                   }
                 >
-                  {selected ? <Check className="h-4 w-4" strokeWidth={3} /> : null}
+                  {selected && !soon ? (
+                    <Check className="h-4 w-4" strokeWidth={3} />
+                  ) : null}
                 </span>
                 <span className="min-w-0 flex-1 text-sm font-semibold text-foreground">
                   {g.aspiration}
                 </span>
-                {isCurrent && (
+                {soon ? (
+                  <span
+                    className="flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                    style={{
+                      background: `hsl(${PURPLE} / 0.16)`,
+                      color: `hsl(${PURPLE_TEXT})`,
+                    }}
+                  >
+                    <Lock className="h-2.5 w-2.5" strokeWidth={2.5} />
+                    Akan datang
+                  </span>
+                ) : isCurrent ? (
                   <span
                     className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold"
                     style={{ background: `hsl(${TEAL} / 0.16)`, color: `hsl(${TEAL})` }}
                   >
                     Semasa
                   </span>
-                )}
+                ) : null}
               </button>
             )
           })}
@@ -812,20 +927,24 @@ function RoutineChangeDialog({
           {ROUTINE_ENTRIES.map(([code, name]) => {
             const selected = pendingRoutines.includes(code)
             const isCurrent = currentRoutines.includes(code)
+            const soon = isRoutineComingSoon(code)
             return (
               <button
                 key={code}
                 type="button"
-                onClick={() => onToggle(code)}
+                disabled={soon}
+                onClick={() => !soon && onToggle(code)}
                 aria-pressed={selected}
                 className={cn(
                   "flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-all",
-                  selected
-                    ? "bg-white/[0.06]"
-                    : "border-white/10 hover:border-white/20 hover:bg-white/[0.03]"
+                  soon
+                    ? "cursor-not-allowed border-white/10 opacity-55"
+                    : selected
+                      ? "bg-white/[0.06]"
+                      : "border-white/10 hover:border-white/20 hover:bg-white/[0.03]"
                 )}
                 style={
-                  selected
+                  selected && !soon
                     ? {
                         borderColor: `hsl(${CORAL} / 0.85)`,
                         boxShadow: `0 0 0 1px hsl(${CORAL} / 0.6)`,
@@ -836,26 +955,37 @@ function RoutineChangeDialog({
                 <span
                   className={cn(
                     "flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border transition-all",
-                    selected ? "border-transparent" : "border-white/25"
+                    selected && !soon ? "border-transparent" : "border-white/25"
                   )}
-                  style={selected ? { background: `hsl(${CORAL})` } : undefined}
+                  style={selected && !soon ? { background: `hsl(${CORAL})` } : undefined}
                   aria-hidden
                 >
-                  {selected && (
+                  {selected && !soon && (
                     <Check className="h-4 w-4 text-background" strokeWidth={3} />
                   )}
                 </span>
                 <span className="min-w-0 flex-1 text-sm font-semibold text-foreground">
                   {name}
                 </span>
-                {isCurrent && (
+                {soon ? (
+                  <span
+                    className="flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                    style={{
+                      background: `hsl(${PURPLE} / 0.16)`,
+                      color: `hsl(${PURPLE_TEXT})`,
+                    }}
+                  >
+                    <Lock className="h-2.5 w-2.5" strokeWidth={2.5} />
+                    Akan datang
+                  </span>
+                ) : isCurrent ? (
                   <span
                     className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold"
                     style={{ background: `hsl(${TEAL} / 0.16)`, color: `hsl(${TEAL})` }}
                   >
                     Semasa
                   </span>
-                )}
+                ) : null}
               </button>
             )
           })}

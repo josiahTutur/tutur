@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { Check, Sparkles } from "lucide-react"
+import { Check, Lock, Sparkles } from "lucide-react"
 import { GOALS } from "@/lib/goals"
 
 /* ========================================================================== *
@@ -26,7 +26,10 @@ export default function GoalSelection({
   /** Routes into the DashboardHub generative stream with the chosen goal. */
   onComplete: (goalCode: string) => void
 }) {
-  const [selectedGoal, setSelectedGoal] = useState<string | null>(null)
+  // Pre-select the first available (non-coming-soon) goal.
+  const [selectedGoal, setSelectedGoal] = useState<string | null>(
+    GOALS.find((g) => !g.comingSoon)?.code ?? null
+  )
 
   return (
     <main className="flex h-screen flex-col">
@@ -47,8 +50,12 @@ export default function GoalSelection({
             </h1>
             <p className="mx-auto mt-3 max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground md:mx-0">
               Sila pilih satu matlamat yang paling tepat dengan situasi anak anda
-              sekarang. AI Maya akan membina pelan tindakan harian serta strategi
-              intervensi khusus berdasarkan pilihan ini.
+              sekarang. AI Maya akan membina pelan tindakan harian berdasarkan
+              pilihan ini.{" "}
+              <span className="font-semibold text-foreground">
+                Setiap matlamat merangkumi aktiviti harian sehingga 30 hari
+                (1 bulan).
+              </span>
             </p>
           </header>
 
@@ -56,22 +63,26 @@ export default function GoalSelection({
           <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {GOALS.map((goal, i) => {
               const selected = selectedGoal === goal.code
+              const soon = !!goal.comingSoon
               return (
                 <button
                   key={goal.code}
                   type="button"
-                  onClick={() => setSelectedGoal(goal.code)}
+                  disabled={soon}
+                  onClick={() => !soon && setSelectedGoal(goal.code)}
                   aria-pressed={selected}
                   className={cn(
-                    "group flex animate-fade-up flex-col rounded-3xl border p-5 text-left backdrop-blur-xl transition-all duration-200 ease-in-out hover:scale-[1.02]",
-                    selected
-                      ? "bg-white/[0.07]"
-                      : "border-white/10 bg-white/[0.04] hover:border-white/20 hover:shadow-[0_0_32px_-10px_hsl(12_100%_64%/0.4)]"
+                    "group relative flex animate-fade-up flex-col rounded-3xl border p-5 text-left backdrop-blur-xl transition-all duration-200 ease-in-out",
+                    soon
+                      ? "cursor-not-allowed border-white/10 bg-white/[0.02] opacity-55"
+                      : selected
+                        ? "bg-white/[0.07] hover:scale-[1.02]"
+                        : "border-white/10 bg-white/[0.04] hover:scale-[1.02] hover:border-white/20 hover:shadow-[0_0_32px_-10px_hsl(12_100%_64%/0.4)]"
                   )}
                   style={{
                     animationDelay: `${i * 50}ms`,
                     animationFillMode: "both",
-                    ...(selected
+                    ...(selected && !soon
                       ? {
                           borderColor: `hsl(${CORAL} / 0.85)`,
                           boxShadow: `0 0 0 1px hsl(${CORAL} / 0.6), 0 0 38px -6px hsl(${CORAL} / 0.55)`,
@@ -79,12 +90,12 @@ export default function GoalSelection({
                       : {}),
                   }}
                 >
-                  {/* Code chip + selected indicator */}
+                  {/* Code chip + status indicator */}
                   <div className="mb-3 flex items-center justify-between">
                     <span
                       className="rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider transition-colors"
                       style={
-                        selected
+                        selected && !soon
                           ? {
                               background: `hsl(${CORAL} / 0.18)`,
                               color: `hsl(${CORAL})`,
@@ -98,16 +109,29 @@ export default function GoalSelection({
                       Matlamat {goal.code}
                     </span>
 
-                    <span
-                      className={cn(
-                        "flex h-6 w-6 items-center justify-center rounded-full transition-all duration-200",
-                        selected ? "scale-100 opacity-100" : "scale-75 opacity-0"
-                      )}
-                      style={{ background: `hsl(${CORAL})` }}
-                      aria-hidden
-                    >
-                      <Check className="h-3.5 w-3.5 text-background" strokeWidth={3} />
-                    </span>
+                    {soon ? (
+                      <span
+                        className="flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide"
+                        style={{
+                          background: `hsl(${PURPLE} / 0.16)`,
+                          color: `hsl(${PURPLE} / 0.9)`,
+                        }}
+                      >
+                        <Lock className="h-3 w-3" strokeWidth={2.5} />
+                        Akan datang
+                      </span>
+                    ) : (
+                      <span
+                        className={cn(
+                          "flex h-6 w-6 items-center justify-center rounded-full transition-all duration-200",
+                          selected ? "scale-100 opacity-100" : "scale-75 opacity-0"
+                        )}
+                        style={{ background: `hsl(${CORAL})` }}
+                        aria-hidden
+                      >
+                        <Check className="h-3.5 w-3.5 text-background" strokeWidth={3} />
+                      </span>
+                    )}
                   </div>
 
                   {/* Aspiration */}
@@ -130,6 +154,11 @@ export default function GoalSelection({
                       </span>
                     ))}
                   </div>
+
+                  {/* Programme length */}
+                  <p className="mt-3 text-[11px] font-medium text-muted-foreground">
+                    📅 Aktiviti harian sehingga 30 hari (1 bulan)
+                  </p>
                 </button>
               )
             })}

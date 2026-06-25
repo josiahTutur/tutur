@@ -65,12 +65,15 @@ export default function AnalysisView({
   profile,
   goal,
   todayCompleted,
+  todaySeconds,
 }: {
   profile?: Profile
   /** Active primary goal code (G1–G10). */
   goal?: string
   /** Live count of activities completed today (shared with Aktiviti Harian). */
   todayCompleted?: number
+  /** Live total seconds spent on today's activities. */
+  todaySeconds?: number
 }) {
   const childName = profile?.childName?.trim() || "anak anda"
   const stage = Math.min(Math.max(profile?.stage ?? 1, 1), 5)
@@ -144,8 +147,13 @@ export default function AnalysisView({
         {/* ----------------------- Track 1 — Konsistensi ----------------------- */}
         <SectionLabel>Konsistensi Anda</SectionLabel>
 
-        {/* Daily-completion calendar — identical to the Aktiviti Harian view */}
-        <ProgressCalendar todayCompleted={todayCompleted} />
+        {/* Daily-completion calendar — only real completions show; past days
+            stay neutral (no placeholder) until truly done. */}
+        <ProgressCalendar
+          todayCompleted={todayCompleted}
+          todaySeconds={todaySeconds}
+          samplePast={false}
+        />
 
         {/* Weekly intervention minutes vs target */}
         <Card
