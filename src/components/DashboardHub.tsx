@@ -15,6 +15,7 @@ import {
   Library,
   BarChart3,
   ChevronRight,
+  Trash2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Profile } from "@/lib/types"
@@ -24,6 +25,7 @@ import {
   STAGE_INFO,
   STAGE_ORDER,
   type Activity,
+  type AacWord,
   type StageCode,
 } from "@/lib/activities"
 import ActivityLibrary from "@/components/ActivityLibrary"
@@ -355,7 +357,10 @@ export default function DashboardHub({
           </ViewLayer>
 
           <ViewLayer visible={activeNav === "aac"}>
-            <AacBoard />
+            {/* Desktop: board sits inline in the canvas */}
+            <div className="aac-inline h-full">
+              <AacBoard />
+            </div>
           </ViewLayer>
 
           <ViewLayer visible={activeNav === "classic"}>
@@ -398,6 +403,16 @@ export default function DashboardHub({
           </ViewLayer>
         </div>
       </main>
+
+      {/* Papan AAC — fullscreen landscape overlay on mobile/tablet (touch).
+          Hidden on desktop (CSS), where the inline board is used instead. */}
+      {activeNav === "aac" && (
+        <div className="aac-fullscreen fixed inset-0 z-[70] overflow-hidden bg-background">
+          <div className="force-landscape">
+            <AacBoard onExit={() => select("ai")} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1319,97 +1334,187 @@ function VideoCard({ video, hue }: { video: VideoItem; hue: number }) {
 /*  Papan Pemuka Klasik dashboard (which lives behind the classic toggle).    */
 /* -------------------------------------------------------------------------- */
 
-interface AacTile {
-  label: string
-  emoji: string
-}
-
-const AAC_CATEGORIES: { id: string; label: string; hue: number; tiles: AacTile[] }[] = [
-  {
-    id: "teras",
-    label: "Teras",
-    hue: 12, // coral
-    tiles: [
-      { label: "Saya", emoji: "🙋" },
-      { label: "Mahu", emoji: "✋" },
-      { label: "Tidak", emoji: "🚫" },
-      { label: "Lagi", emoji: "➕" },
-      { label: "Habis", emoji: "✅" },
-      { label: "Tolong", emoji: "🙏" },
-      { label: "Suka", emoji: "❤️" },
-      { label: "Pergi", emoji: "🏃" },
-    ],
-  },
-  {
-    id: "makanan",
-    label: "Makanan",
-    hue: 172, // teal
-    tiles: [
-      { label: "Makan", emoji: "🍽️" },
-      { label: "Minum", emoji: "🥤" },
-      { label: "Susu", emoji: "🍼" },
-      { label: "Air", emoji: "💧" },
-      { label: "Biskut", emoji: "🍪" },
-      { label: "Nasi", emoji: "🍚" },
-      { label: "Buah", emoji: "🍎" },
-      { label: "Aiskrim", emoji: "🍦" },
-    ],
-  },
-  {
-    id: "perasaan",
-    label: "Perasaan",
-    hue: 270, // purple
-    tiles: [
-      { label: "Gembira", emoji: "😄" },
-      { label: "Sedih", emoji: "😢" },
-      { label: "Marah", emoji: "😠" },
-      { label: "Takut", emoji: "😨" },
-      { label: "Sakit", emoji: "🤕" },
-      { label: "Penat", emoji: "🥱" },
-      { label: "Sayang", emoji: "🤗" },
-    ],
-  },
-  {
-    id: "aktiviti",
-    label: "Aktiviti",
-    hue: 210, // blue
-    tiles: [
-      { label: "Main", emoji: "🧸" },
-      { label: "Tidur", emoji: "😴" },
-      { label: "Mandi", emoji: "🛁" },
-      { label: "Baca", emoji: "📖" },
-      { label: "Nyanyi", emoji: "🎵" },
-      { label: "Tonton", emoji: "📺" },
-      { label: "Jalan", emoji: "🚶" },
-    ],
-  },
+// Core communication board — 48 words laid out as 4 rows × 12 columns.
+const AAC_WORDS: AacWord[] = [
+  // Row 1
+  { label: "Saya", emoji: "🙋" },
+  { label: "Awak", emoji: "🫵" },
+  { label: "Nak", emoji: "✋" },
+  { label: "Bagi", emoji: "🤲" },
+  { label: "Buka", emoji: "📂" },
+  { label: "Tutup", emoji: "📕" },
+  { label: "Gembira", emoji: "😄" },
+  { label: "Suka", emoji: "❤️" },
+  { label: "Nasi", emoji: "🍚" },
+  { label: "Susu", emoji: "🍼" },
+  { label: "Ya", emoji: "✅" },
+  { label: "Tidak", emoji: "❌" },
+  // Row 2
+  { label: "Ibu", emoji: "👩" },
+  { label: "Ayah", emoji: "👨" },
+  { label: "Makan", emoji: "🍽️" },
+  { label: "Minum", emoji: "🥤" },
+  { label: "Cukup", emoji: "👌" },
+  { label: "Habis", emoji: "🏁" },
+  { label: "Sedih", emoji: "😢" },
+  { label: "Seronok", emoji: "🤩" },
+  { label: "Air", emoji: "💧" },
+  { label: "Roti", emoji: "🍞" },
+  { label: "Jom", emoji: "🙌" },
+  { label: "Bye", emoji: "👋" },
+  // Row 3
+  { label: "Abang", emoji: "👦" },
+  { label: "Adik", emoji: "🧒" },
+  { label: "Main", emoji: "🧸" },
+  { label: "Mandi", emoji: "🛁" },
+  { label: "Tandas", emoji: "🚽" },
+  { label: "Tidur", emoji: "😴" },
+  { label: "Sakit", emoji: "🤕" },
+  { label: "Penat", emoji: "🥱" },
+  { label: "Biskut", emoji: "🍪" },
+  { label: "Pisang", emoji: "🍌" },
+  { label: "Apa", emoji: "❓" },
+  { label: "Jangan", emoji: "🚫" },
+  // Row 4
+  { label: "Punya", emoji: "🫳" },
+  { label: "Cikgu", emoji: "👩‍🏫" },
+  { label: "Tengok", emoji: "👀" },
+  { label: "Pergi", emoji: "🚶" },
+  { label: "Boleh", emoji: "👍" },
+  { label: "Berhenti", emoji: "🛑" },
+  { label: "Marah", emoji: "😠" },
+  { label: "Takut", emoji: "😨" },
+  { label: "Epal", emoji: "🍎" },
+  { label: "Sayur", emoji: "🥦" },
+  { label: "Ini", emoji: "👇" },
+  { label: "Itu", emoji: "👉" },
 ]
 
-function AacBoard() {
-  const [category, setCategory] = useState(AAC_CATEGORIES[0].id)
-  const [strip, setStrip] = useState<AacTile[]>([])
+const AAC_VIOLET = "265 90% 62%"
+const AAC_VIOLET_TEXT = "265 90% 84%"
 
-  const active = AAC_CATEGORIES.find((c) => c.id === category) ?? AAC_CATEGORIES[0]
+/* -------------------------------------------------------------------------- */
+/*  AAC audio — one clip per word in public/audio/aac/<file>.mp4              */
+/* -------------------------------------------------------------------------- */
+
+const AAC_AUDIO_BASE = "/audio/aac/"
+// Skip the silent lead-in at the start of each clip (seconds).
+const AAC_AUDIO_OFFSET = 0.8
+// Per-word overrides where the lead-in differs from the default.
+const AAC_AUDIO_OFFSETS: Record<string, number> = {
+  Saya: 1.5,
+  Nak: 0.5,
+  Bye: 1.0,
+  Makan: 1.5,
+  Ibu: 0.5,
+  Abang: 0.5,
+  Main: 1.0,
+  Penat: 1.3,
+  Biskut: 1.3,
+  Takut: 1.0,
+  Pergi: 1.2,
+  Cikgu: 0.2,
+  Punya: 0.2,
+  Buka: 1.5,
+  Tutup: 1.2,
+}
+// Words whose audio filename differs from the lowercased label.
+const AAC_AUDIO_OVERRIDES: Record<string, string> = {
+  Seronok: "senorok", // file is named senorok.mp4
+}
+
+function aacAudioSrc(label: string): string {
+  const name = AAC_AUDIO_OVERRIDES[label] ?? label.toLowerCase()
+  return `${AAC_AUDIO_BASE}${name}.mp4`
+}
+
+/** Speak a word via the browser's Malay TTS — used when a clip is missing. */
+function speakFallback(label: string) {
+  if (typeof window === "undefined" || !window.speechSynthesis) return
+  const utter = new SpeechSynthesisUtterance(label)
+  utter.lang = "ms-MY"
+  window.speechSynthesis.speak(utter)
+}
+
+/** Play a word's audio clip; resolves when it finishes (or falls back to TTS). */
+function playWord(label: string): Promise<void> {
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = () => {
+      if (!settled) {
+        settled = true
+        resolve()
+      }
+    }
+    const fail = () => {
+      if (!settled) {
+        speakFallback(label)
+        finish()
+      }
+    }
+    const offset = AAC_AUDIO_OFFSETS[label] ?? AAC_AUDIO_OFFSET
+    const audio = new Audio(aacAudioSrc(label))
+    audio.preload = "auto"
+    const seek = () => {
+      if (audio.currentTime < offset && audio.duration > offset) {
+        try {
+          audio.currentTime = offset
+        } catch {
+          /* not seekable yet — ignore */
+        }
+      }
+    }
+    audio.addEventListener("loadedmetadata", seek, { once: true })
+    audio.onended = finish
+    audio.onerror = fail
+    audio.play().then(seek).catch(fail)
+  })
+}
+
+function AacBoard({ onExit }: { onExit?: () => void }) {
+  const [strip, setStrip] = useState<AacWord[]>([])
+  const playing = useRef(false)
+
+  // Add a word to the strip and play its clip immediately.
+  function addWord(tile: AacWord) {
+    setStrip((s) => [...s, tile])
+    playWord(tile.label)
+  }
+
+  // Play the whole sentence, one clip after another.
+  async function speak() {
+    if (playing.current || strip.length === 0) return
+    playing.current = true
+    for (const tile of strip) {
+      await playWord(tile.label)
+    }
+    playing.current = false
+  }
 
   return (
-    <div className="flex h-full flex-col px-4 pt-5 md:px-8 md:pt-6">
-      <p className="shrink-0 text-sm text-muted-foreground">
-        Ketik simbol untuk membantu anak anda berkomunikasi.
-      </p>
-
-      {/* Sentence strip */}
-      <div className="mt-4 flex shrink-0 items-center gap-2 rounded-2xl glass-strong p-2.5">
-        <div className="flex min-h-[2.75rem] flex-1 flex-wrap items-center gap-2 overflow-hidden">
+    <div className="flex h-full flex-col gap-2 p-2 sm:gap-3 sm:p-3">
+      {/* Top bar: exit (fullscreen only) · sentence strip · speak · clear */}
+      <div className="flex shrink-0 items-center gap-2">
+        {onExit && (
+          <button
+            type="button"
+            onClick={onExit}
+            aria-label="Keluar papan AAC"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        )}
+        <div className="flex min-h-[2.5rem] flex-1 items-center gap-2 overflow-x-auto whitespace-nowrap rounded-2xl glass-strong px-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {strip.length === 0 ? (
-            <span className="px-2 text-sm text-muted-foreground">
-              Ayat anak anda akan terbina di sini…
+            <span className="text-sm text-muted-foreground">
+              Ketik simbol untuk membina ayat…
             </span>
           ) : (
             strip.map((tile, i) => (
               <span
                 key={`${tile.label}-${i}`}
-                className="flex animate-fade-up items-center gap-1.5 rounded-xl bg-white/[0.06] px-2.5 py-1.5 text-sm font-medium"
-                style={{ animationFillMode: "both" }}
+                className="flex shrink-0 items-center gap-1 rounded-lg bg-white/[0.06] px-2 py-1 text-sm font-medium"
               >
                 <span aria-hidden>{tile.emoji}</span>
                 {tile.label}
@@ -1417,10 +1522,10 @@ function AacBoard() {
             ))
           )}
         </div>
-
         <button
           type="button"
           aria-label="Sebut ayat"
+          onClick={speak}
           disabled={strip.length === 0}
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-background transition-transform active:scale-95 disabled:opacity-40"
           style={{
@@ -1437,62 +1542,31 @@ function AacBoard() {
           disabled={strip.length === 0}
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground disabled:opacity-40"
         >
-          <X className="h-5 w-5" />
+          <Trash2 className="h-5 w-5" />
         </button>
       </div>
 
-      {/* Category filter */}
-      <div className="mt-4 flex shrink-0 flex-wrap gap-2">
-        {AAC_CATEGORIES.map((c) => {
-          const selected = c.id === category
-          return (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => setCategory(c.id)}
-              className={cn(
-                "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all",
-                selected ? "text-foreground" : "glass text-foreground/70 hover:text-foreground"
-              )}
-              style={
-                selected
-                  ? {
-                      background: `hsl(${c.hue} 90% 60% / 0.18)`,
-                      boxShadow: `inset 0 0 0 1px hsl(${c.hue} 90% 60% / 0.45)`,
-                      color: `hsl(${c.hue} 90% 78%)`,
-                    }
-                  : undefined
-              }
+      {/* 4 × 12 core-word grid */}
+      <div className="grid min-h-0 flex-1 grid-cols-12 grid-rows-4 gap-1.5">
+        {AAC_WORDS.map((tile) => (
+          <button
+            key={tile.label}
+            type="button"
+            onClick={() => addWord(tile)}
+            className="flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl glass-strong p-1 transition-all hover:bg-white/[0.09] active:scale-95"
+            style={{ boxShadow: `inset 0 0 0 1px hsl(${AAC_VIOLET} / 0.22)` }}
+          >
+            <span className="text-xl leading-none sm:text-2xl" aria-hidden>
+              {tile.emoji}
+            </span>
+            <span
+              className="max-w-full truncate text-[9px] font-semibold leading-tight sm:text-[11px]"
+              style={{ color: `hsl(${AAC_VIOLET_TEXT})` }}
             >
-              {c.label}
-            </button>
-          )
-        })}
-      </div>
-
-      {/* Symbol grid */}
-      <div className="mt-4 flex-1 overflow-y-auto pb-6">
-        <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5">
-          {active.tiles.map((tile) => (
-            <button
-              key={tile.label}
-              type="button"
-              onClick={() => setStrip((s) => [...s, tile])}
-              className="flex aspect-square flex-col items-center justify-center gap-1.5 rounded-2xl glass-strong transition-all hover:bg-white/[0.09] active:scale-95"
-              style={{ boxShadow: `inset 0 0 0 1px hsl(${active.hue} 90% 60% / 0.25)` }}
-            >
-              <span className="text-3xl sm:text-4xl" aria-hidden>
-                {tile.emoji}
-              </span>
-              <span
-                className="text-xs font-semibold sm:text-sm"
-                style={{ color: `hsl(${active.hue} 90% 80%)` }}
-              >
-                {tile.label}
-              </span>
-            </button>
-          ))}
-        </div>
+              {tile.label}
+            </span>
+          </button>
+        ))}
       </div>
     </div>
   )

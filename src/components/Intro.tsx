@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { ArrowRight } from "lucide-react"
+import ParticleFace from "@/components/ParticleFace"
+import ParticleMessages from "@/components/ParticleMessages"
 
 const LINES = [
   "Setiap mak ada saat ini",
@@ -10,8 +12,8 @@ const LINES = [
   "Tutur tunjuk caranya, saat demi saat.",
 ]
 
-// Delay before each line reveals (ms). The CTA appears after the last line.
-const REVEAL_INTERVAL = 1600
+// The portrait assembles first; the story particles begin once it's formed.
+const FACE_INTRO = 2600
 
 export default function Intro({
   onComplete,
@@ -21,20 +23,19 @@ export default function Intro({
   /** Demo shortcut: skip sign-in/profiling and jump to the dashboard. */
   onSkip: () => void
 }) {
-  const [visibleCount, setVisibleCount] = useState(0)
+  // The face assembles first, then the messages begin cycling above it.
+  const [storyStarted, setStoryStarted] = useState(false)
+  const [storyDone, setStoryDone] = useState(false)
 
   useEffect(() => {
-    if (visibleCount >= LINES.length) return
-    const id = setTimeout(() => setVisibleCount((c) => c + 1), REVEAL_INTERVAL)
+    const id = setTimeout(() => setStoryStarted(true), FACE_INTRO)
     return () => clearTimeout(id)
-  }, [visibleCount])
-
-  const allRevealed = visibleCount >= LINES.length
+  }, [])
 
   return (
-    <main className="relative flex min-h-screen flex-col px-7 pb-10 pt-16">
+    <main className="relative flex min-h-screen flex-col px-7 pb-10 pt-12">
       {/* Brand mark + demo skip */}
-      <div className="mb-12 flex animate-fade-in items-center justify-between">
+      <div className="mb-6 flex animate-fade-in items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl glass-strong shadow-glow-cyan">
             <span className="text-lg font-bold text-gradient">T</span>
@@ -50,35 +51,30 @@ export default function Intro({
         </button>
       </div>
 
-      {/* Sequential vertical fade-up text carousel */}
-      <div className="flex flex-1 flex-col justify-center">
-        <div className="space-y-6">
-          {LINES.map((line, i) => {
-            const isVisible = i < visibleCount
-            const isLast = i === LINES.length - 1
-            return (
-              <p
-                key={i}
-                className={[
-                  "text-balance text-2xl font-semibold leading-snug tracking-tight transition-opacity",
-                  isLast ? "text-gradient text-[1.7rem]" : "text-foreground/90",
-                  isVisible ? "animate-fade-up" : "opacity-0",
-                ].join(" ")}
-                style={{ animationFillMode: "both" }}
-                aria-hidden={!isVisible}
-              >
-                {line}
-              </p>
-            )
-          })}
+      {/* Story particles above the persistent portrait */}
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1">
+        {/* Each line assembles & disperses as particles in this fixed slot.
+            Taller than the text so the smoke has room to rise. */}
+        <div className="h-44 w-full max-w-md shrink-0 sm:h-48">
+          <ParticleMessages
+            lines={LINES}
+            start={storyStarted}
+            onComplete={() => setStoryDone(true)}
+            className="h-full w-full"
+          />
+        </div>
+
+        {/* Maya's portrait — assembles from particles, then stays put */}
+        <div className="h-[42vh] w-full max-w-sm">
+          <ParticleFace className="h-full w-full" />
         </div>
       </div>
 
-      {/* Glowing CTA — fades up only after the full story is told */}
+      {/* Glowing CTA — fades up after the story has played out */}
       <div
         className={[
-          "mt-12 transition-all duration-700",
-          allRevealed
+          "mt-8 transition-all duration-700",
+          storyDone
             ? "translate-y-0 opacity-100"
             : "pointer-events-none translate-y-4 opacity-0",
         ].join(" ")}
