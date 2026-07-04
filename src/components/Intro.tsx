@@ -46,26 +46,33 @@ export default function Intro({
     return () => clearTimeout(id)
   }, [typed])
 
-  // Maintenance mode — a focused full-screen takeover: only the poster + a login
-  // entry for existing users. Maya, the brand panel and everything else are hidden.
+  // Maintenance mode — keep the violet brand half (desktop/tablet) on the left,
+  // and show only the poster + a login entry on the right. Maya, the story
+  // particles, greeting and top nav are all hidden.
   if (MAINTENANCE) {
     return (
-      <main
-        className="relative flex min-h-screen items-center justify-center overflow-hidden px-6"
-        style={{ background: "var(--surface-app)", color: "var(--text-body)" }}
+      <div
+        className="flex min-h-screen"
+        style={{ background: "var(--surface-app)" }}
       >
-        <div
-          className="pointer-events-none absolute inset-0"
-          aria-hidden
-          style={{
-            background:
-              "radial-gradient(55% 40% at 50% 30%, var(--violet-50), transparent 72%)",
-          }}
-        />
-        <div className="relative w-full max-w-md">
-          <MaintenanceNotice t={t} onLogin={onSkip} />
-        </div>
-      </main>
+        <BrandPanel />
+        <main
+          className="relative flex min-h-screen flex-1 items-center justify-center overflow-hidden px-6"
+          style={{ color: "var(--text-body)" }}
+        >
+          <div
+            className="pointer-events-none absolute inset-0"
+            aria-hidden
+            style={{
+              background:
+                "radial-gradient(55% 40% at 50% 30%, var(--violet-50), transparent 72%)",
+            }}
+          />
+          <div className="relative w-full max-w-md">
+            <MaintenanceNotice t={t} onLogin={onSkip} />
+          </div>
+        </main>
+      </div>
     )
   }
 
