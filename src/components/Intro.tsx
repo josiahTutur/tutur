@@ -46,6 +46,29 @@ export default function Intro({
     return () => clearTimeout(id)
   }, [typed])
 
+  // Maintenance mode — a focused full-screen takeover: only the poster + a login
+  // entry for existing users. Maya, the brand panel and everything else are hidden.
+  if (MAINTENANCE) {
+    return (
+      <main
+        className="relative flex min-h-screen items-center justify-center overflow-hidden px-6"
+        style={{ background: "var(--surface-app)", color: "var(--text-body)" }}
+      >
+        <div
+          className="pointer-events-none absolute inset-0"
+          aria-hidden
+          style={{
+            background:
+              "radial-gradient(55% 40% at 50% 30%, var(--violet-50), transparent 72%)",
+          }}
+        />
+        <div className="relative w-full max-w-md">
+          <MaintenanceNotice t={t} onLogin={onSkip} />
+        </div>
+      </main>
+    )
+  }
+
   return (
     <div
       className="flex min-h-screen"
@@ -179,33 +202,27 @@ export default function Intro({
                 : "pointer-events-none translate-y-4 opacity-0",
             ].join(" ")}
           >
-            {MAINTENANCE ? (
-              <MaintenanceNotice t={t} onLogin={onSkip} />
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={onComplete}
-                  className="shimmer-overlay group flex w-full items-center justify-center gap-2 rounded-full py-4 text-base font-bold transition-transform active:scale-[0.98]"
-                  style={{
-                    fontFamily: "var(--font-display)",
-                    background: "var(--color-brand)",
-                    color: "var(--color-on-brand)",
-                    boxShadow: "var(--shadow-brand)",
-                    letterSpacing: "-0.01em",
-                  }}
-                >
-                  {t.intro.cta}
-                  <ArrowRight className="h-5 w-5 transition-transform duration-300 group-hover:translate-x-1" />
-                </button>
-                <p
-                  className="mt-4 text-center text-xs"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  {t.intro.freeNote}
-                </p>
-              </>
-            )}
+            <button
+              type="button"
+              onClick={onComplete}
+              className="shimmer-overlay group flex w-full items-center justify-center gap-2 rounded-full py-4 text-base font-bold transition-transform active:scale-[0.98]"
+              style={{
+                fontFamily: "var(--font-display)",
+                background: "var(--color-brand)",
+                color: "var(--color-on-brand)",
+                boxShadow: "var(--shadow-brand)",
+                letterSpacing: "-0.01em",
+              }}
+            >
+              {t.intro.cta}
+              <ArrowRight className="h-5 w-5 transition-transform duration-300 group-hover:translate-x-1" />
+            </button>
+            <p
+              className="mt-4 text-center text-xs"
+              style={{ color: "var(--text-muted)" }}
+            >
+              {t.intro.freeNote}
+            </p>
           </div>
         </div>
       </main>
