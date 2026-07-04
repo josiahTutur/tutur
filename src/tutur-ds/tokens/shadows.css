@@ -1,0 +1,26 @@
+/* ============================================================
+   tutur · Shadow tokens
+   Soft, diffuse, violet-tinted (violet-ink #26155C) — never harsh
+   black. Elevation reads like gentle daylight.
+   ============================================================ */
+:root {
+  --shadow-xs: 0 1px 2px rgba(38, 21, 92, 0.06);
+  --shadow-sm: 0 2px 6px rgba(38, 21, 92, 0.08),
+               0 1px 2px rgba(38, 21, 92, 0.05);
+  --shadow-md: 0 6px 16px rgba(38, 21, 92, 0.10),
+               0 2px 4px rgba(38, 21, 92, 0.06);
+  --shadow-lg: 0 16px 34px rgba(38, 21, 92, 0.12),
+               0 4px 10px rgba(38, 21, 92, 0.06);
+  --shadow-xl: 0 28px 60px rgba(38, 21, 92, 0.16),
+               0 8px 18px rgba(38, 21, 92, 0.08);
+
+  /* Colored glows */
+  --shadow-brand: 0 10px 24px rgba(106, 47, 232, 0.34);
+  --shadow-accent: 0 10px 24px rgba(174, 232, 90, 0.45);
+
+  /* Inner shadow — sunken wells */
+  --shadow-inset: inset 0 1px 2px rgba(38, 21, 92, 0.08);
+
+  /* Focus ring */
+  --ring-focus: 0 0 0 4px rgba(139, 92, 255, 0.35);
+}

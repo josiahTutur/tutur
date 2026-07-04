@@ -2,6 +2,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { isRoutineComingSoon } from "@/lib/activities"
+import { useLang } from "@/lib/i18n"
 import { ArrowLeft, Check, Lock, Sparkles } from "lucide-react"
 
 /* ========================================================================== *
@@ -15,9 +16,9 @@ import { ArrowLeft, Check, Lock, Sparkles } from "lucide-react"
  *  count badges, Warm Coral for active (multi-selected) cards.
  * ========================================================================== */
 
-const CORAL = "12 100% 64%" // active multi-selection indicator
-const TEAL = "172 66% 50%" // activity-count badges
-const PURPLE = "270 95% 65%" // "coming soon" badge
+const CORAL = "259 80% 55%" // active multi-selection indicator
+const TEAL = "180 68% 34%" // activity-count badges
+const PURPLE = "259 80% 55%" // "coming soon" badge
 
 interface Routine {
   code: string
@@ -29,6 +30,35 @@ interface Routine {
   /** Social-proof highlight ("🔥 Pilihan Ramai"). */
   popular?: boolean
 }
+
+const STR = {
+  ms: {
+    back: "Kembali",
+    step: "Langkah 2 / 3",
+    heading: "Pilih Rutin Harian Anda",
+    subtitle:
+      "Pilih rutin harian di mana anda meluangkan masa bersama anak. Kami akan menyuntik aktiviti intervensi pertuturan ke dalam jadual sedia ada anda. Pilih sekurang-kurangnya 1 rutin.",
+    comingSoon: "Akan datang",
+    popular: "🔥 Pilihan Ramai",
+    activitiesAvailable: (n: number) => `${n} Aktiviti Tersedia`,
+    selectedCount: (n: number) => `${n} rutin dipilih`,
+    selectPrompt: "Pilih sekurang-kurangnya 1 rutin untuk diteruskan",
+    confirm: "Sahkan Jadual & Jalankan Tutur",
+  },
+  en: {
+    back: "Back",
+    step: "Step 2 / 3",
+    heading: "Choose Your Daily Routines",
+    subtitle:
+      "Pick the daily routines where you spend time with your child. We'll weave speech intervention activities into your existing schedule. Choose at least 1 routine.",
+    comingSoon: "Coming soon",
+    popular: "🔥 Popular Choice",
+    activitiesAvailable: (n: number) => `${n} Activities Available`,
+    selectedCount: (n: number) => `${n} routine${n === 1 ? "" : "s"} selected`,
+    selectPrompt: "Choose at least 1 routine to continue",
+    confirm: "Confirm Schedule & Launch Tutur",
+  },
+} as const
 
 const ROUTINES: Routine[] = [
   { code: "R1", name: "Masa Bermain", activities: 8, strategies: ["S1", "S2", "S3"], popular: true },
@@ -52,6 +82,8 @@ export default function RoutineSelection({
   /** Returns to the previous (goal selection) step. */
   onBack: () => void
 }) {
+  const { lang } = useLang()
+  const s = STR[lang]
   const [selectedRoutines, setSelectedRoutines] = useState<string[]>([])
 
   // Clean immutable toggle — add if absent, remove if present.
@@ -77,10 +109,10 @@ export default function RoutineSelection({
               className="flex items-center gap-1.5 rounded-full glass px-3.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
-              Kembali
+              {s.back}
             </button>
             <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Langkah 2 / 3
+              {s.step}
             </span>
           </div>
 
@@ -89,16 +121,11 @@ export default function RoutineSelection({
             className="animate-fade-up text-center md:text-left"
             style={{ animationFillMode: "both" }}
           >
-            <h1
-              className="text-balance text-2xl font-bold tracking-tight md:text-3xl"
-              style={{ textShadow: `0 0 26px hsl(${TEAL} / 0.45)` }}
-            >
-              Pilih Rutin Harian Anda <span aria-hidden>⏳</span>
+            <h1 className="text-balance text-2xl font-bold tracking-tight md:text-3xl">
+              {s.heading} <span aria-hidden>⏳</span>
             </h1>
             <p className="mx-auto mt-3 max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground md:mx-0">
-              Pilih rutin harian di mana anda meluangkan masa bersama anak. Kami
-              akan menyuntik aktiviti intervensi pertuturan ke dalam jadual sedia
-              ada anda. Pilih sekurang-kurangnya 1 rutin.
+              {s.subtitle}
             </p>
           </header>
 
@@ -117,10 +144,10 @@ export default function RoutineSelection({
                   className={cn(
                     "group relative flex animate-fade-up flex-col rounded-3xl border p-5 text-left backdrop-blur-xl transition-all duration-200 ease-in-out",
                     soon
-                      ? "cursor-not-allowed border-white/10 bg-white/[0.02] opacity-55"
+                      ? "cursor-not-allowed border-foreground/10 bg-foreground/5 opacity-55"
                       : selected
-                        ? "bg-white/[0.07] hover:scale-[1.02]"
-                        : "border-white/10 bg-white/[0.04] hover:scale-[1.02] hover:border-white/20 hover:shadow-[0_0_32px_-10px_hsl(12_100%_64%/0.4)]"
+                        ? "bg-[hsl(259_80%_55%/0.10)] hover:scale-[1.02]"
+                        : "border-foreground/10 bg-card hover:scale-[1.02] hover:bg-foreground/5 hover:shadow-[0_0_32px_-10px_hsl(259_80%_55%/0.4)]"
                   )}
                   style={{
                     animationDelay: `${i * 50}ms`,
@@ -138,7 +165,7 @@ export default function RoutineSelection({
                     <span
                       className={cn(
                         "flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border transition-all duration-200",
-                        selected && !soon ? "border-transparent" : "border-white/25"
+                        selected && !soon ? "border-transparent" : "border-foreground/25"
                       )}
                       style={selected && !soon ? { background: `hsl(${CORAL})` } : undefined}
                       aria-hidden
@@ -161,7 +188,7 @@ export default function RoutineSelection({
                         }}
                       >
                         <Lock className="h-3 w-3" strokeWidth={2.5} />
-                        Akan datang
+                        {s.comingSoon}
                       </span>
                     ) : (
                       routine.popular && (
@@ -172,7 +199,7 @@ export default function RoutineSelection({
                             color: `hsl(${CORAL})`,
                           }}
                         >
-                          🔥 Pilihan Ramai
+                          {s.popular}
                         </span>
                       )
                     )}
@@ -187,7 +214,7 @@ export default function RoutineSelection({
                         color: `hsl(${TEAL})`,
                       }}
                     >
-                      {routine.activities} Aktiviti Tersedia
+                      {s.activitiesAvailable(routine.activities)}
                     </span>
                   )}
                 </button>
@@ -201,9 +228,7 @@ export default function RoutineSelection({
       <footer className="shrink-0 border-t border-border/60 bg-background/80 px-6 pb-[max(env(safe-area-inset-bottom),1rem)] pt-4 backdrop-blur-xl md:px-8">
         <div className="mx-auto max-w-5xl">
           <p className="mb-2.5 text-center text-xs text-muted-foreground">
-            {canProceed
-              ? `${count} rutin dipilih`
-              : "Pilih sekurang-kurangnya 1 rutin untuk diteruskan"}
+            {canProceed ? s.selectedCount(count) : s.selectPrompt}
           </p>
           <Button
             size="lg"
@@ -218,7 +243,7 @@ export default function RoutineSelection({
             }}
           >
             <Sparkles className="transition-transform duration-300 group-hover:scale-110" />
-            Sahkan Jadual &amp; Jalankan Tutur
+            {s.confirm}
           </Button>
         </div>
       </footer>

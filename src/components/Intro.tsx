@@ -1,22 +1,15 @@
 import { useEffect, useState } from "react"
-import { Button } from "@/components/ui/button"
-import { ArrowRight } from "lucide-react"
+import { ArrowRight, Wrench } from "lucide-react"
+import { useLang, useT, type Lang } from "@/lib/i18n"
+import { MAINTENANCE } from "@/lib/config"
 import ParticleFace from "@/components/ParticleFace"
 import ParticleMessages from "@/components/ParticleMessages"
+import BrandPanel from "@/components/BrandPanel"
+import tuturSymbol from "@/assets/brand/tutur-symbol-trim.png"
+import tuturWordmark from "@/assets/brand/tutur-wordmark-trim.png"
 
-const LINES = [
-  "Setiap mak ada saat ini",
-  "Anak dah pergi therapy",
-  "Tapi balik rumah… langkah yang seterusnya apa",
-  "Therapy 1 jam seminggu, yang lain 167 jam — di rumah.",
-  "Tutur tunjuk caranya, saat demi saat.",
-]
-
-// Maya's greeting, typed out over the same window the face assembles in.
-const GREETING = "Hai, saya Maya AI"
-const GREETING_DURATION = 3000
-// Pause after the greeting finishes before the story begins.
-const STORY_DELAY = 700
+// Maya's greeting is typed out over the window the face assembles in.
+const GREETING_DURATION = 1000
 
 export default function Intro({
   onComplete,
@@ -26,11 +19,23 @@ export default function Intro({
   /** Top-right "Log Masuk" — goes straight to the sign-in page. */
   onSkip: () => void
 }) {
-  // The face assembles first, then the messages begin cycling above it.
-  const [storyStarted, setStoryStarted] = useState(false)
-  const [storyDone, setStoryDone] = useState(false)
+  const t = useT()
+  const { lang, setLang } = useLang()
+  const LINES = t.intro.lines
+  const GREETING = t.intro.greeting
+
+  // The story messages, Maya's portrait, and the CTA all appear together from
+  // the start — the parent never waits through a sequence before beginning.
+  const storyStarted = true
+  // The CTA fades in early — while Maya's portrait is still assembling.
+  const [ctaReady, setCtaReady] = useState(false)
   // Typewriter — types Maya's greeting in step with the face assembling.
   const [typed, setTyped] = useState(0)
+
+  useEffect(() => {
+    const id = setTimeout(() => setCtaReady(true), 700)
+    return () => clearTimeout(id)
+  }, [])
 
   useEffect(() => {
     if (typed >= GREETING.length) return
@@ -41,85 +46,248 @@ export default function Intro({
     return () => clearTimeout(id)
   }, [typed])
 
-  // The story begins only after the greeting has finished typing.
-  useEffect(() => {
-    if (typed < GREETING.length) return
-    const id = setTimeout(() => setStoryStarted(true), STORY_DELAY)
-    return () => clearTimeout(id)
-  }, [typed])
+  return (
+    <div
+      className="flex min-h-screen"
+      style={{ background: "var(--surface-app)" }}
+    >
+      {/* Violet brand half (desktop only) */}
+      <BrandPanel />
+
+      {/* Action half — Maya + CTA */}
+      <main
+        className="relative flex min-h-screen flex-1 flex-col overflow-hidden px-7 pb-10 pt-8 lg:px-12"
+        style={{ color: "var(--text-body)" }}
+      >
+        {/* Soft violet calm so the white side never feels clinical */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          aria-hidden
+          style={{
+            background:
+              "radial-gradient(55% 40% at 50% 34%, var(--violet-50), transparent 72%)",
+          }}
+        />
+
+        {/* Borderless top nav — logo lockup (mobile only) + language + sign-in */}
+        <nav className="relative flex animate-fade-in items-center">
+          {/* Symbol + wordmark, mobile only (desktop uses the BrandPanel logo) */}
+          <div className="flex items-center gap-2 lg:hidden">
+            <img
+              src={tuturSymbol}
+              alt=""
+              className="h-6 w-auto select-none"
+              draggable={false}
+            />
+            <img
+              src={tuturWordmark}
+              alt="Tutur"
+              className="h-5 w-auto select-none"
+              draggable={false}
+            />
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            {/* Language switch — new users can start in their language */}
+            <div
+              className="flex rounded-full p-0.5 text-[11px] font-semibold"
+              style={{ background: "var(--color-brand-subtle)" }}
+            >
+              {(["ms", "en"] as Lang[]).map((l) => (
+                <button
+                  key={l}
+                  type="button"
+                  onClick={() => setLang(l)}
+                  aria-pressed={lang === l}
+                  className="rounded-full px-2.5 py-1 transition-colors"
+                  style={
+                    lang === l
+                      ? {
+                          background: "var(--color-brand)",
+                          color: "var(--color-on-brand)",
+                        }
+                      : { color: "var(--violet-700)" }
+                  }
+                >
+                  {l === "ms" ? "BM" : "EN"}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={onSkip}
+              className="rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors"
+              style={{
+                background: "var(--color-brand-subtle)",
+                color: "var(--violet-700)",
+              }}
+            >
+              {t.common.signIn}
+            </button>
+          </div>
+        </nav>
+
+        {/* Centered content, capped to a comfortable reading width */}
+        <div className="relative mx-auto flex w-full max-w-md flex-1 flex-col">
+          {/* Story particles above the persistent portrait */}
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1">
+            {/* Each line assembles & disperses as particles in this fixed slot. */}
+            <div className="h-44 w-full max-w-md shrink-0 sm:h-48">
+              <ParticleMessages
+                lines={LINES}
+                start={storyStarted}
+                onComplete={() => {}}
+                className="h-full w-full"
+              />
+            </div>
+
+            {/* Maya's portrait — assembles from particles, then stays put */}
+            <div className="h-[42vh] w-full max-w-sm">
+              <ParticleFace className="h-full w-full" />
+            </div>
+
+            {/* Maya's greeting — typed out directly below the portrait */}
+            <p
+              className="mt-2 text-center text-xl font-bold tracking-tight"
+              style={{
+                fontFamily: "var(--font-display)",
+                backgroundImage:
+                  "linear-gradient(100deg, var(--violet-500), var(--violet-700))",
+                WebkitBackgroundClip: "text",
+                backgroundClip: "text",
+                color: "transparent",
+              }}
+              aria-label={GREETING}
+            >
+              {GREETING.slice(0, typed)}
+              {typed < GREETING.length && (
+                <span
+                  className="ml-0.5 animate-pulse font-normal"
+                  style={{ color: "var(--violet-300)" }}
+                >
+                  |
+                </span>
+              )}
+            </p>
+          </div>
+
+          {/* CTA — fades in while Maya is still assembling */}
+          <div
+            className={[
+              "mt-8 transition-all duration-700",
+              ctaReady
+                ? "translate-y-0 opacity-100"
+                : "pointer-events-none translate-y-4 opacity-0",
+            ].join(" ")}
+          >
+            {MAINTENANCE ? (
+              <MaintenanceNotice t={t} onLogin={onSkip} />
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={onComplete}
+                  className="shimmer-overlay group flex w-full items-center justify-center gap-2 rounded-full py-4 text-base font-bold transition-transform active:scale-[0.98]"
+                  style={{
+                    fontFamily: "var(--font-display)",
+                    background: "var(--color-brand)",
+                    color: "var(--color-on-brand)",
+                    boxShadow: "var(--shadow-brand)",
+                    letterSpacing: "-0.01em",
+                  }}
+                >
+                  {t.intro.cta}
+                  <ArrowRight className="h-5 w-5 transition-transform duration-300 group-hover:translate-x-1" />
+                </button>
+                <p
+                  className="mt-4 text-center text-xs"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  {t.intro.freeNote}
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+      </main>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ *
+ * Maintenance notice — shows the poster at /maintenance.png when present,
+ * with a styled fallback if it isn't. The login button stays either way, so
+ * existing users can always get in.
+ * ------------------------------------------------------------------ */
+
+function MaintenanceNotice({
+  t,
+  onLogin,
+}: {
+  t: ReturnType<typeof useT>
+  onLogin: () => void
+}) {
+  const [imgError, setImgError] = useState(false)
 
   return (
-    <main className="relative flex min-h-screen flex-col px-7 pb-10 pt-12">
-      {/* Brand mark + sign-in */}
-      <div className="mb-6 flex animate-fade-in items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl glass-strong shadow-glow-cyan">
-            <span className="text-lg font-bold text-gradient">T</span>
+    <>
+      {imgError ? (
+        <div
+          className="rounded-3xl border p-5 text-center"
+          style={{
+            background: "var(--color-brand-subtle)",
+            borderColor: "var(--border-subtle)",
+          }}
+        >
+          <div
+            className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl"
+            style={{ background: "var(--surface-card)" }}
+          >
+            <Wrench
+              className="h-6 w-6"
+              style={{ color: "var(--color-brand)" }}
+            />
           </div>
-          <span className="text-lg font-semibold tracking-tight">Tutur</span>
+          <h2
+            className="text-base font-bold tracking-tight"
+            style={{
+              fontFamily: "var(--font-display)",
+              color: "var(--text-strong)",
+            }}
+          >
+            {t.maintenance.title}
+          </h2>
+          <p
+            className="mx-auto mt-2 max-w-xs text-sm"
+            style={{ color: "var(--text-body)" }}
+          >
+            {t.maintenance.body}
+          </p>
         </div>
-        <button
-          type="button"
-          onClick={onSkip}
-          className="rounded-full glass px-3.5 py-1.5 text-xs font-medium text-foreground/80 transition-colors hover:text-foreground"
-        >
-          Log Masuk
-        </button>
-      </div>
+      ) : (
+        <img
+          src="/maintenance.png"
+          alt={t.maintenance.title}
+          onError={() => setImgError(true)}
+          className="w-full select-none rounded-3xl"
+          draggable={false}
+          style={{ boxShadow: "var(--shadow-md)" }}
+        />
+      )}
 
-      {/* Story particles above the persistent portrait */}
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1">
-        {/* Each line assembles & disperses as particles in this fixed slot.
-            Taller than the text so the smoke has room to rise. */}
-        <div className="h-44 w-full max-w-md shrink-0 sm:h-48">
-          <ParticleMessages
-            lines={LINES}
-            start={storyStarted}
-            onComplete={() => setStoryDone(true)}
-            className="h-full w-full"
-          />
-        </div>
-
-        {/* Maya's portrait — assembles from particles, then stays put */}
-        <div className="h-[42vh] w-full max-w-sm">
-          <ParticleFace className="h-full w-full" />
-        </div>
-
-        {/* Maya's greeting — typed out directly below the portrait */}
-        <p
-          className="mt-2 text-center text-lg font-semibold tracking-tight text-gradient"
-          aria-label={GREETING}
-        >
-          {GREETING.slice(0, typed)}
-          {typed < GREETING.length && (
-            <span className="ml-0.5 animate-pulse font-normal text-foreground/60">
-              |
-            </span>
-          )}
-        </p>
-      </div>
-
-      {/* Glowing CTA — fades up after the story has played out */}
-      <div
-        className={[
-          "mt-10 transition-all duration-700",
-          storyDone
-            ? "translate-y-0 opacity-100"
-            : "pointer-events-none translate-y-4 opacity-0",
-        ].join(" ")}
+      <button
+        type="button"
+        onClick={onLogin}
+        className="mt-4 flex w-full items-center justify-center gap-2 rounded-full py-3.5 text-sm font-bold transition-transform active:scale-[0.98]"
+        style={{
+          fontFamily: "var(--font-display)",
+          background: "var(--color-brand)",
+          color: "var(--color-on-brand)",
+          boxShadow: "var(--shadow-brand)",
+        }}
       >
-        <Button
-          size="lg"
-          onClick={onComplete}
-          className="shimmer-overlay group w-full animate-pulse-glow rounded-2xl text-base font-semibold"
-        >
-          Mula dengan Tutur
-          <ArrowRight className="transition-transform duration-300 group-hover:translate-x-1" />
-        </Button>
-        <p className="mt-4 text-center text-xs text-muted-foreground">
-          Percuma untuk bermula · Tiada kad kredit diperlukan
-        </p>
-      </div>
-    </main>
+        {t.maintenance.loginCta}
+        <ArrowRight className="h-5 w-5" />
+      </button>
+    </>
   )
 }

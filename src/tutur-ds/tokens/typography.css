@@ -1,0 +1,55 @@
+/* ============================================================
+   tutur · Typography tokens  (Brand Book v1.0)
+   ============================================================ */
+:root {
+  /* Families */
+  --font-display: 'Poppins', ui-rounded, 'Segoe UI', system-ui, sans-serif;  /* headlines, UI */
+  --font-body:    'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif; /* body, bilingual */
+  --font-serif:   'Playfair Display', Georgia, 'Times New Roman', serif;      /* pull-quotes (italic) */
+  --font-script:  'Caveat', 'Segoe Script', cursive;                          /* Togetherness sub-brand */
+  /* Sifonn is the locked logo face — never expose it as a UI token. */
+
+  /* Weights */
+  --weight-regular:  400;
+  --weight-medium:   500;
+  --weight-semibold: 600;
+  --weight-bold:     700;
+  --weight-black:    800;  /* Poppins display / cover */
+
+  /* Type scale (px) — Poppins display, Inter text */
+  --font-size-display-xl: 56px;
+  --font-size-display-lg: 44px;
+  --font-size-display-md: 34px;
+  --font-size-h1: 28px;
+  --font-size-h2: 23px;
+  --font-size-h3: 18px;
+  --font-size-body-lg: 17px;
+  --font-size-body:    15px;
+  --font-size-body-sm: 13px;
+  --font-size-caption: 12px;
+  --font-size-overline: 11px;
+
+  /* Line heights */
+  --leading-tight:   1.04;   /* Poppins headlines */
+  --leading-snug:    1.28;
+  --leading-normal:  1.5;
+  --leading-relaxed: 1.65;   /* body default in Brand Book */
+
+  /* Letter spacing */
+  --tracking-tight:    -0.02em;  /* Poppins headings */
+  --tracking-snug:     -0.01em;
+  --tracking-normal:   0em;
+  --tracking-wide:     0.04em;
+  --tracking-overline: 0.16em;   /* eyebrow / role labels */
+
+  /* ---- Semantic roles ---- */
+  --type-display-font: var(--font-display);
+  --type-display-weight: var(--weight-black);
+  --type-heading-font: var(--font-display);
+  --type-heading-weight: var(--weight-bold);
+  --type-body-font: var(--font-body);
+  --type-body-weight: var(--weight-regular);
+  --type-label-font: var(--font-display);
+  --type-label-weight: var(--weight-semibold);
+  --type-quote-font: var(--font-serif);
+}

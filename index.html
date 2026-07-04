@@ -1,11 +1,19 @@
 <!doctype html>
-<html lang="ms" class="dark">
+<html lang="ms">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="theme-color" content="#05060a" />
+    <meta name="theme-color" content="#FBFAFF" />
     <title>Tutur — Intervensi Pertuturan di Rumah</title>
+    <!-- Apply the saved theme before first paint (no flash). Default = light. -->
+    <script>
+      try {
+        if (localStorage.getItem("tutur.theme") === "dark") {
+          document.documentElement.classList.add("dark");
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

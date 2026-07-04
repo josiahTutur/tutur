@@ -1,0 +1,12 @@
+/* ============================================================
+   tutur · Webfonts  (Brand Book v1.0)
+   Logo    : Sifonn — LOGO ONLY. Never set headings/UI/body in
+             Sifonn. It is not loaded here; it lives inside the
+             locked logo lockup asset.
+   Display : Poppins — headlines, UI, buttons (600/700/800).
+   Body    : Inter   — body & captions, bilingual BM/EN (400/500/600).
+   Editorial: Playfair Display italic — pull-quotes only.
+   Sub-brand: Caveat — "Tutur Togetherness" community script only.
+   NOTE: served from Google Fonts CDN (no binaries in-repo).
+   ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Inter:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Playfair+Display:ital,wght@1,600;1,700&family=Caveat:wght@600;700&display=swap');

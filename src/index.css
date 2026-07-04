@@ -1,38 +1,66 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap");
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    /* Tutur — High-Tech / AI-First dark theme (default) */
-    --background: 240 24% 4%;
-    --foreground: 210 40% 98%;
+    /* Tutur — light brand theme (Brand Book v1.0). White is the base,
+       Tutur Violet is the accent. Values are HSL channels for Tailwind. */
+    --background: 250 100% 99%; /* surface-app #FBFAFF (violet-tinted white) */
+    --foreground: 252 29% 12%; /* ink #191628 */
 
-    --card: 240 20% 7%;
-    --card-foreground: 210 40% 98%;
+    --card: 0 0% 100%; /* white */
+    --card-foreground: 252 29% 12%;
 
-    --primary: 187 100% 50%; /* neon cyan */
-    --primary-foreground: 240 30% 6%;
+    --primary: 259 80% 55%; /* Tutur Violet #6A2FE8 */
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 270 95% 65%; /* neon purple */
-    --secondary-foreground: 240 30% 6%;
+    --secondary: 252 60% 96%; /* violet-50 wash */
+    --secondary-foreground: 258 60% 40%; /* violet-deep text */
 
-    --muted: 240 12% 14%;
-    --muted-foreground: 240 8% 62%;
+    --muted: 252 32% 95%; /* neutral-100 #EFEDF7 */
+    --muted-foreground: 246 15% 60%; /* mist #8B88A8 */
 
-    --accent: 270 95% 65%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 252 60% 96%;
+    --accent-foreground: 258 60% 40%;
 
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 50% 50%; /* coral #C04040 */
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 240 14% 16%;
-    --input: 240 14% 16%;
-    --ring: 187 100% 50%;
+    --border: 252 30% 92%; /* line #E6E3F2 */
+    --input: 252 30% 92%;
+    --ring: 257 100% 68%; /* violet-400 #8B5CFF */
 
-    --radius: 0.9rem;
+    --radius: 0.875rem; /* 14px controls */
+  }
+
+  /* ---- Dark theme — "Violet Ink" (warm violet-charcoal, brighter violet
+     accent). Toggled by a `.dark` class on <html>. ---- */
+  .dark {
+    --background: 252 24% 10%; /* deep violet-charcoal #16131F */
+    --foreground: 252 33% 93%; /* soft off-white #E9E6F3 */
+
+    --card: 252 23% 13%; /* #1E1A2A */
+    --card-foreground: 252 33% 93%;
+
+    --primary: 257 100% 68%; /* brighter violet #8B5CFF */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 252 28% 20%;
+    --secondary-foreground: 252 40% 88%;
+
+    --muted: 252 24% 16%;
+    --muted-foreground: 250 14% 62%;
+
+    --accent: 252 28% 20%;
+    --accent-foreground: 252 40% 88%;
+
+    --destructive: 0 65% 64%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 252 22% 21%;
+    --input: 252 22% 21%;
+    --ring: 257 100% 68%;
   }
 }
 
@@ -48,42 +76,70 @@
   }
 
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-body), "Inter", system-ui, sans-serif;
     -webkit-tap-highlight-color: transparent;
-    /* Ambient neon depth */
-    background-image:
-      radial-gradient(60% 50% at 50% 0%, hsl(187 100% 50% / 0.10), transparent 70%),
-      radial-gradient(50% 50% at 100% 100%, hsl(270 95% 65% / 0.12), transparent 70%),
-      radial-gradient(40% 40% at 0% 80%, hsl(187 100% 50% / 0.06), transparent 70%);
+    /* Soft violet calm so the white never feels clinical */
+    background-image: radial-gradient(
+      60% 40% at 50% -5%,
+      hsl(258 90% 96% / 0.7),
+      transparent 70%
+    );
     background-attachment: fixed;
+  }
+
+  /* Dark theme backdrop — a deep violet bloom instead of the light one. */
+  .dark body {
+    background-image: radial-gradient(
+      65% 45% at 50% -8%,
+      hsl(258 70% 30% / 0.55),
+      transparent 70%
+    );
+  }
+
+  /* Headings use Poppins (display); body stays Inter. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display), "Poppins", ui-rounded, system-ui,
+      sans-serif;
   }
 }
 
 @layer components {
-  /* Frosted-glass surface used for inputs and panels */
+  /* Light card surfaces (replace the old frosted dark glass). */
   .glass {
-    @apply border border-white/10 bg-white/[0.04] backdrop-blur-xl;
-    box-shadow: inset 0 1px 0 0 hsl(0 0% 100% / 0.06);
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    box-shadow: var(--shadow-sm);
   }
 
   .glass-strong {
-    @apply border border-white/10 bg-white/[0.06] backdrop-blur-2xl;
-    box-shadow:
-      inset 0 1px 0 0 hsl(0 0% 100% / 0.08),
-      0 10px 40px -12px hsl(240 60% 2% / 0.8);
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    box-shadow: var(--shadow-md);
   }
 
-  /* Gradient neon text */
+  /* On dark, the light violet-tinted shadows don't read — use dark shadows. */
+  .dark .glass {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  }
+  .dark .glass-strong {
+    box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.5);
+  }
+
+  /* Violet gradient text (brand). */
   .text-gradient {
     @apply bg-clip-text text-transparent;
     background-image: linear-gradient(
       100deg,
-      hsl(187 100% 70%),
-      hsl(270 95% 75%)
+      hsl(259 80% 55%),
+      hsl(258 60% 42%)
     );
   }
 
-  /* Shimmering sweep overlay (used on the CTA) */
+  /* Shimmering sweep overlay (used on CTAs). */
   .shimmer-overlay {
     position: relative;
     overflow: hidden;
@@ -95,7 +151,7 @@
     background: linear-gradient(
       110deg,
       transparent 30%,
-      hsl(0 0% 100% / 0.28) 50%,
+      hsl(0 0% 100% / 0.35) 50%,
       transparent 70%
     );
     background-size: 200% 100%;
@@ -104,13 +160,16 @@
   }
 }
 
-/* Custom slim scrollbar to match the dark aesthetic */
+/* Light scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
 }
 ::-webkit-scrollbar-thumb {
-  background: hsl(240 14% 22%);
+  background: hsl(252 24% 86%);
   border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(252 20% 78%);
 }
 
 /* ── Papan AAC fullscreen-landscape (mobile/tablet only) ─────────────────────

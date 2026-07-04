@@ -3,10 +3,10 @@ import { useEffect, useRef } from "react"
 /* ========================================================================== *
  *  ParticleFace — a particle portrait of Maya (the AI).
  *
- *  Loads a portrait image (public/maya.png), keys out its background, and
- *  samples the subject into thousands of coloured particles. They fly in from
- *  scattered positions and "assemble" into the photo, then shimmer gently and
- *  parallax toward the mouse pointer (so the face appears to follow the cursor).
+ *  Loads a portrait image (public/maya.png — already transparent, used as-is)
+ *  and samples its opaque pixels into thousands of coloured particles. They fly
+ *  in from scattered positions and "assemble" into the image, which then fades
+ *  in crisp over the particles.
  *
  *  If the image is missing, it falls back to a procedural violet face so the
  *  app never breaks.
@@ -80,8 +80,8 @@ export default function ParticleFace({
     let SW = 0
     let SH = 0
     let size = Math.max(1, Math.round(dpr))
-    // Crisp background-removed photo the particles resolve into at the end.
-    let cutout: HTMLCanvasElement | null = null
+    // The original (already-transparent) image the particles resolve into.
+    let revealImg: HTMLImageElement | null = null
 
     function pushSamples(
       step: number,
@@ -118,46 +118,22 @@ export default function ParticleFace({
       if (!o) return buildProcedural()
       o.drawImage(img, 0, 0, SW, SH)
       const d = o.getImageData(0, 0, SW, SH).data
-      const bgR = d[0]
-      const bgG = d[1]
-      const bgB = d[2]
+      // The image is already transparent — sample only its opaque pixels; do NOT
+      // colour-key (that would punch holes in Maya's darker areas).
       pushSamples(2, 0.82, (i) => {
+        const a = d[i + 3]
+        if (a < 24) return null
         const r = d[i]
         const g = d[i + 1]
         const b = d[i + 2]
-        const a = d[i + 3]
-        if (a < 10) return null
-        // Key out the (uniform) background near the corner colour.
-        if (Math.hypot(r - bgR, g - bgG, b - bgB) < 36) return null
         const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255
         return { color: `rgb(${r},${g},${b})`, bright: 0.55 + lum * 0.45 }
       })
       colored = true
       size = Math.max(1, Math.round(dpr * 1.4))
 
-      // Build a crisp, background-removed cutout for the final reveal.
-      const CW = Math.min(img.width, 560)
-      const CH = Math.max(1, Math.round(CW * (img.height / img.width)))
-      const cut = document.createElement("canvas")
-      cut.width = CW
-      cut.height = CH
-      const cc = cut.getContext("2d")
-      if (cc) {
-        cc.drawImage(img, 0, 0, CW, CH)
-        const cimg = cc.getImageData(0, 0, CW, CH)
-        const cd = cimg.data
-        const kR = cd[0]
-        const kG = cd[1]
-        const kB = cd[2]
-        for (let i = 0; i < cd.length; i += 4) {
-          const dist = Math.hypot(cd[i] - kR, cd[i + 1] - kG, cd[i + 2] - kB)
-          // Soft key: transparent near the bg colour, feathered at the edge.
-          if (dist < 34) cd[i + 3] = 0
-          else if (dist < 70) cd[i + 3] = Math.round(255 * ((dist - 34) / 36))
-        }
-        cc.putImageData(cimg, 0, 0)
-        cutout = cut
-      }
+      // Use the original image as-is for the crisp reveal — no keying.
+      revealImg = img
     }
 
     function buildProcedural() {
@@ -215,7 +191,9 @@ export default function ParticleFace({
       const ease = 1 - Math.pow(1 - intro, 3)
       // How much of the final crisp photo is shown (0 → 1).
       const photo =
-        colored && cutout ? Math.max(0, Math.min(1, (t - ASSEMBLE) / REVEAL)) : 0
+        colored && revealImg
+          ? Math.max(0, Math.min(1, (t - ASSEMBLE) / REVEAL))
+          : 0
 
       const faceH = cv.height * 0.98
       const faceW = faceH * (SW / SH)
@@ -246,11 +224,12 @@ export default function ParticleFace({
         }
       }
 
-      // Crisp photo fades in over the assembled particles → exact maya.png.
-      if (photo > 0 && cutout) {
+      // Crisp image fades in over the assembled particles → exact maya.png,
+      // used as-is (its transparency is preserved, nothing is keyed out).
+      if (photo > 0 && revealImg) {
         c.globalCompositeOperation = "source-over"
         c.globalAlpha = photo
-        c.drawImage(cutout, ox, oy, faceW, faceH)
+        c.drawImage(revealImg, ox, oy, faceW, faceH)
         c.globalAlpha = 1
       }
 

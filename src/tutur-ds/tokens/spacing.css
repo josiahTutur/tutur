@@ -1,0 +1,30 @@
+/* ============================================================
+   tutur · Spacing tokens — 4px base grid
+   ============================================================ */
+:root {
+  --space-0:  0;
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
+
+  /* Component-scale defaults */
+  --gap-inline:   8px;
+  --gap-stack:    16px;
+  --pad-card:     20px;
+  --pad-screen:   20px;
+  --pad-control-x: 16px;
+  --pad-control-y: 11px;
+
+  /* Layout */
+  --container-max: 1120px;
+  --app-max: 440px;   /* mobile-app column width */
+}

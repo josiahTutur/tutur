@@ -3,6 +3,32 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { Check, Lock, Sparkles } from "lucide-react"
 import { GOALS } from "@/lib/goals"
+import { useLang, pick } from "@/lib/i18n"
+
+const STR = {
+  ms: {
+    titlePrefix: "Pilih Matlamat Utama Anda",
+    subtitleLead:
+      "Sila pilih satu matlamat yang paling tepat dengan situasi anak anda sekarang. AI Maya akan membina pelan tindakan harian berdasarkan pilihan ini.",
+    subtitleEmphasis:
+      "Setiap matlamat merangkumi aktiviti harian sehingga 30 hari (1 bulan).",
+    goalLabel: "Matlamat",
+    comingSoon: "Akan datang",
+    programmeLength: "📅 Aktiviti harian sehingga 30 hari (1 bulan)",
+    confirmCta: "Sahkan Matlamat & Mula Panduan AI",
+  },
+  en: {
+    titlePrefix: "Choose Your Main Goal",
+    subtitleLead:
+      "Please choose the one goal that best fits your child's situation right now. Maya AI will build a daily action plan based on this choice.",
+    subtitleEmphasis:
+      "Each goal includes daily activities for up to 30 days (1 month).",
+    goalLabel: "Goal",
+    comingSoon: "Coming soon",
+    programmeLength: "📅 Daily activities for up to 30 days (1 month)",
+    confirmCta: "Confirm Goal & Start AI Guidance",
+  },
+} as const
 
 /* ========================================================================== *
  *  GoalSelection — Part 3.5: Post-Profiling Goal Selection Matrix
@@ -16,9 +42,9 @@ import { GOALS } from "@/lib/goals"
  *  on the title.
  * ========================================================================== */
 
-const CORAL = "12 100% 64%" // active-selection indicator
-const TEAL = "172 66% 50%" // focus-strategy badges
-const PURPLE = "270 95% 65%" // title accent glow
+const CORAL = "259 80% 55%" // active-selection indicator
+const TEAL = "180 68% 34%" // focus-strategy badges
+const PURPLE = "259 80% 55%" // title accent glow
 
 export default function GoalSelection({
   onComplete,
@@ -26,6 +52,9 @@ export default function GoalSelection({
   /** Routes into the DashboardHub generative stream with the chosen goal. */
   onComplete: (goalCode: string) => void
 }) {
+  const { lang } = useLang()
+  const s = STR[lang]
+
   // Pre-select the first available (non-coming-soon) goal.
   const [selectedGoal, setSelectedGoal] = useState<string | null>(
     GOALS.find((g) => !g.comingSoon)?.code ?? null
@@ -43,18 +72,15 @@ export default function GoalSelection({
           >
             <h1
               className="text-balance text-2xl font-bold tracking-tight md:text-3xl"
-              style={{ textShadow: `0 0 28px hsl(${PURPLE} / 0.6)` }}
+              style={{ color: `hsl(${PURPLE})` }}
             >
-              Pilih Matlamat Utama Anda{" "}
+              {s.titlePrefix}{" "}
               <span aria-hidden>🎯</span>
             </h1>
             <p className="mx-auto mt-3 max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground md:mx-0">
-              Sila pilih satu matlamat yang paling tepat dengan situasi anak anda
-              sekarang. AI Maya akan membina pelan tindakan harian berdasarkan
-              pilihan ini.{" "}
+              {s.subtitleLead}{" "}
               <span className="font-semibold text-foreground">
-                Setiap matlamat merangkumi aktiviti harian sehingga 30 hari
-                (1 bulan).
+                {s.subtitleEmphasis}
               </span>
             </p>
           </header>
@@ -74,10 +100,10 @@ export default function GoalSelection({
                   className={cn(
                     "group relative flex animate-fade-up flex-col rounded-3xl border p-5 text-left backdrop-blur-xl transition-all duration-200 ease-in-out",
                     soon
-                      ? "cursor-not-allowed border-white/10 bg-white/[0.02] opacity-55"
+                      ? "cursor-not-allowed border-foreground/10 bg-white opacity-55"
                       : selected
-                        ? "bg-white/[0.07] hover:scale-[1.02]"
-                        : "border-white/10 bg-white/[0.04] hover:scale-[1.02] hover:border-white/20 hover:shadow-[0_0_32px_-10px_hsl(12_100%_64%/0.4)]"
+                        ? "bg-[hsl(259_80%_55%/0.10)] hover:scale-[1.02]"
+                        : "border-foreground/10 bg-white hover:scale-[1.02] hover:bg-foreground/5 hover:shadow-[0_0_32px_-10px_hsl(259_80%_55%/0.4)]"
                   )}
                   style={{
                     animationDelay: `${i * 50}ms`,
@@ -101,12 +127,12 @@ export default function GoalSelection({
                               color: `hsl(${CORAL})`,
                             }
                           : {
-                              background: "hsl(0 0% 100% / 0.06)",
+                              background: "hsl(var(--foreground) / 0.06)",
                               color: "hsl(var(--muted-foreground))",
                             }
                       }
                     >
-                      Matlamat {goal.code}
+                      {s.goalLabel} {goal.code}
                     </span>
 
                     {soon ? (
@@ -118,7 +144,7 @@ export default function GoalSelection({
                         }}
                       >
                         <Lock className="h-3 w-3" strokeWidth={2.5} />
-                        Akan datang
+                        {s.comingSoon}
                       </span>
                     ) : (
                       <span
@@ -136,7 +162,7 @@ export default function GoalSelection({
 
                   {/* Aspiration */}
                   <p className="flex-1 text-pretty text-base font-semibold leading-snug text-foreground">
-                    “{goal.aspiration}”
+                    “{pick(goal.aspiration, lang)}”
                   </p>
 
                   {/* Focus-strategy badges */}
@@ -157,7 +183,7 @@ export default function GoalSelection({
 
                   {/* Programme length */}
                   <p className="mt-3 text-[11px] font-medium text-muted-foreground">
-                    📅 Aktiviti harian sehingga 30 hari (1 bulan)
+                    {s.programmeLength}
                   </p>
                 </button>
               )
@@ -182,7 +208,7 @@ export default function GoalSelection({
             }}
           >
             <Sparkles className="transition-transform duration-300 group-hover:scale-110" />
-            Sahkan Matlamat &amp; Mula Panduan AI
+            {s.confirmCta}
           </Button>
         </div>
       </footer>

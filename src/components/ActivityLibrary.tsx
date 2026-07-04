@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { cn } from "@/lib/utils"
+import { useLang, pick } from "@/lib/i18n"
 import {
   ACTIVITIES,
   ROUTINE_LABELS,
@@ -36,22 +37,155 @@ import {
  *  profile) is highlighted so the parent sees the right pathway first.
  * ========================================================================== */
 
-const CORAL = "12 100% 64%" // active selection
-const TEAL = "172 66% 50%" // routine / activity metadata
-const PURPLE = "270 95% 65%" // AAC modelling accent
-const PURPLE_TEXT = "270 95% 84%" // lighter readable purple text
+const CORAL = "259 80% 55%" // active selection
+const TEAL = "180 68% 34%" // routine / activity metadata
+const PURPLE = "259 80% 55%" // AAC modelling accent
+const PURPLE_TEXT = "258 55% 42%" // lighter readable purple text
 
 /** Minimum seconds on the AAC board before the activity can be completed.
  *  (Testing value — may be increased later.) */
 const AAC_MIN_SECONDS = 15
 
-/** Gentle send-offs shown when a parent leaves before finishing. */
-const MOTIVATIONS = [
-  "Tak mengapa. Setiap percubaan tetap bermakna. 💛",
-  "Rehat seketika tak apa. Jumpa lagi nanti! 🌱",
-  "Anda dah cuba — itu yang penting. 🌟",
-  "Setiap saat bersama anak tetap berharga. 💛",
-]
+/* -------------------------------------------------------------------------- */
+/*  Co-located UI chrome strings (screen/board furniture). Activity content    */
+/*  itself comes from ACTIVITIES and is migrated separately — never here.      */
+/* -------------------------------------------------------------------------- */
+
+const STR = {
+  ms: {
+    /** Gentle send-offs shown when a parent leaves before finishing. */
+    motivations: [
+      "Tak mengapa. Setiap percubaan tetap bermakna. 💛",
+      "Rehat seketika tak apa. Jumpa lagi nanti! 🌱",
+      "Anda dah cuba — itu yang penting. 🌟",
+      "Setiap saat bersama anak tetap berharga. 💛",
+    ],
+    // ActivityLibrary
+    intro: "Pilih aktiviti untuk dilakukan bersama anak anda hari ini.",
+    filterAll: "Semua",
+    emptyState:
+      "Belum ada aktiviti untuk rutin pilihan anda. Aktiviti baharu akan ditambah tidak lama lagi.",
+    activitiesDoneToday: (n: number) => `${n} aktiviti selesai hari ini`,
+    // ActivityCard
+    completed: "Selesai",
+    needToPrepare: "Perlu disediakan",
+    viewGuide: "Lihat panduan →",
+    // ActivityDetail
+    close: "Tutup",
+    yourReflection: "Refleksi Anda",
+    edit: "Edit",
+    cancel: "Batal",
+    save: "Simpan",
+    situation: "Situasi",
+    aacModel: "Model AAC (Aided Language Input)",
+    aacModelNote: (rel: string) =>
+      `Sebut sambil sentuh perkataan ini pada Papan AAC. AAC dimodelkan, bukan diuji — ${rel} tunjuk dahulu.`,
+    wordsToUse: "Perkataan untuk digunakan",
+    instructionFor: (rel: string) => `Arahan ${rel}`,
+    dialogueScript: "Skrip Dialog",
+    childSignalSought: "Isyarat Anak yang Dicari",
+    aacPracticeDone: "Praktik AAC selesai — buka semula",
+    practiseWithAacBoard: "Praktis dengan Papan AAC",
+    done: "Selesai",
+    notDone: "Belum Selesai",
+    practiseToComplete:
+      "Praktis dengan Papan AAC & tulis refleksi untuk selesaikan.",
+    // ActivityAacBoardView
+    backToGuide: "Kembali ke panduan",
+    aacBoard: "Papan AAC",
+    closeAacBoard: "Tutup papan AAC",
+    practiseOnAacBoard: "Praktis di Papan AAC",
+    startPrompt: (secs: number) =>
+      `Tekan Mula, kemudian praktis bersama anak sekurang-kurangnya ${secs} saat.`,
+    start: "Mula",
+    tapToBuild: "Ketik simbol untuk membina ayat…",
+    speakSentence: "Sebut ayat",
+    clearSentence: "Padam ayat",
+    writeReflectionBelow: "Tulis refleksi di bawah untuk selesaikan.",
+    keepPlaying: "Teruskan bermain bersama anak…",
+    maya: "Maya: ",
+    reflectionPlaceholder: "Tulis pemerhatian atau perasaan anda di sini…",
+    saveAndFinish: "Simpan & Selesai",
+    noteSaved: "Nota ini disimpan untuk rekod perkembangan anak anda.",
+    writeToComplete: "Tulis pemerhatian anda untuk menyelesaikan aktiviti.",
+    celebration: "Kita dah berjaya hari ini! 🎉",
+    savedWellDone: "Disimpan! Syabas 🎉",
+    closeWithoutFinishing: "Tutup tanpa selesai?",
+    closeWarning: (secs: number) => ({
+      before: "Anda belum menyimpan refleksi. Jika tutup sekarang, masa dan praktis ini ",
+      bold: "tidak akan disimpan",
+      after: ` — anda perlu mengulang semula selama ${secs} saat kali seterusnya.`,
+    }),
+    continue: "Teruskan",
+    closeConfirm: "Tutup",
+  },
+  en: {
+    motivations: [
+      "That's okay. Every attempt still matters. 💛",
+      "It's fine to take a break. See you again soon! 🌱",
+      "You gave it a try — that's what counts. 🌟",
+      "Every moment with your child is precious. 💛",
+    ],
+    // ActivityLibrary
+    intro: "Choose an activity to do with your child today.",
+    filterAll: "All",
+    emptyState:
+      "There are no activities yet for your chosen routines. New activities will be added soon.",
+    activitiesDoneToday: (n: number) => `${n} activities done today`,
+    // ActivityCard
+    completed: "Done",
+    needToPrepare: "What to prepare",
+    viewGuide: "View guide →",
+    // ActivityDetail
+    close: "Close",
+    yourReflection: "Your Reflection",
+    edit: "Edit",
+    cancel: "Cancel",
+    save: "Save",
+    situation: "Situation",
+    aacModel: "AAC Modelling (Aided Language Input)",
+    aacModelNote: (rel: string) =>
+      `Say the word while touching it on the AAC Board. AAC is modelled, not tested — ${rel} shows the way first.`,
+    wordsToUse: "Words to use",
+    instructionFor: (rel: string) => `Guidance for ${rel}`,
+    dialogueScript: "Dialogue Script",
+    childSignalSought: "Signal to Look For in Your Child",
+    aacPracticeDone: "AAC practice done — reopen",
+    practiseWithAacBoard: "Practise with the AAC Board",
+    done: "Done",
+    notDone: "Not Done Yet",
+    practiseToComplete:
+      "Practise with the AAC Board & write a reflection to finish.",
+    // ActivityAacBoardView
+    backToGuide: "Back to guide",
+    aacBoard: "AAC Board",
+    closeAacBoard: "Close AAC board",
+    practiseOnAacBoard: "Practise on the AAC Board",
+    startPrompt: (secs: number) =>
+      `Tap Start, then practise with your child for at least ${secs} seconds.`,
+    start: "Start",
+    tapToBuild: "Tap a symbol to build a sentence…",
+    speakSentence: "Speak sentence",
+    clearSentence: "Clear sentence",
+    writeReflectionBelow: "Write a reflection below to finish.",
+    keepPlaying: "Keep playing with your child…",
+    maya: "Maya: ",
+    reflectionPlaceholder: "Write your observations or feelings here…",
+    saveAndFinish: "Save & Finish",
+    noteSaved: "This note is saved for your child's progress record.",
+    writeToComplete: "Write your observations to complete the activity.",
+    celebration: "We did it today! 🎉",
+    savedWellDone: "Saved! Well done 🎉",
+    closeWithoutFinishing: "Close without finishing?",
+    closeWarning: (secs: number) => ({
+      before: "You haven't saved your reflection yet. If you close now, this time and practice ",
+      bold: "will not be saved",
+      after: ` — you'll need to repeat it for ${secs} seconds next time.`,
+    }),
+    continue: "Continue",
+    closeConfirm: "Close",
+  },
+} as const
 
 /* -------------------------------------------------------------------------- */
 /*  Activity AAC audio — Malay voice clips (ms-MY-YasminNeural via edge-tts).  */
@@ -131,6 +265,8 @@ export default function ActivityLibrary({
   /** Save/update a completion record (note + optional seconds). */
   onSaveRecord: (code: string, note: string, seconds?: number) => void
 }) {
+  const { lang } = useLang()
+  const s = STR[lang]
   const childStageCode = toStageCode(childStage)
 
   const [routineFilter, setRoutineFilter] = useState<string>("all")
@@ -188,20 +324,20 @@ export default function ActivityLibrary({
           />
 
           <p className="text-sm text-muted-foreground">
-            Pilih aktiviti untuk dilakukan bersama anak anda hari ini.
+            {s.intro}
           </p>
 
           {/* Routine filter */}
           <div className="mt-4 flex flex-wrap gap-2">
             <FilterChip
-              label="Semua"
+              label={s.filterAll}
               active={routineFilter === "all"}
               onClick={() => setRoutineFilter("all")}
             />
             {routineOptions.map((r) => (
               <FilterChip
                 key={r}
-                label={ROUTINE_LABELS[r] ?? r}
+                label={ROUTINE_LABELS[r] ? pick(ROUTINE_LABELS[r], lang) : r}
                 active={routineFilter === r}
                 onClick={() => setRoutineFilter(r)}
               />
@@ -226,8 +362,7 @@ export default function ActivityLibrary({
             </div>
           ) : (
             <p className="mt-10 text-center text-sm text-muted-foreground">
-              Belum ada aktiviti untuk rutin pilihan anda. Aktiviti baharu akan
-              ditambah tidak lama lagi.
+              {s.emptyState}
             </p>
           )}
         </div>
@@ -239,7 +374,7 @@ export default function ActivityLibrary({
           <div className="flex items-center gap-2 text-sm">
             <Check className="h-4 w-4" style={{ color: `hsl(${TEAL})` }} strokeWidth={3} />
             <span className="font-medium">
-              {completedCount} aktiviti selesai hari ini
+              {s.activitiesDoneToday(completedCount)}
             </span>
           </div>
           <div className="flex items-center gap-1.5 text-sm font-semibold">
@@ -293,9 +428,9 @@ function FilterChip({
       style={
         active
           ? {
-              background: `hsl(${TEAL} / 0.16)`,
-              boxShadow: `inset 0 0 0 1px hsl(${TEAL} / 0.4)`,
-              color: `hsl(${TEAL})`,
+              background: `hsl(${CORAL} / 0.16)`,
+              boxShadow: `inset 0 0 0 1px hsl(${CORAL} / 0.4)`,
+              color: `hsl(${CORAL})`,
             }
           : undefined
       }
@@ -322,6 +457,8 @@ function ActivityCard({
   focused: boolean
   onOpen: () => void
 }) {
+  const { lang } = useLang()
+  const s = STR[lang]
   return (
     <button
       type="button"
@@ -329,8 +466,8 @@ function ActivityCard({
       className={cn(
         "group relative flex flex-col items-start rounded-3xl border p-5 text-left backdrop-blur-xl transition-all duration-200 ease-in-out active:scale-[0.99]",
         focused
-          ? "bg-white/[0.07]"
-          : "border-white/10 bg-white/[0.04] hover:border-white/20 hover:shadow-[0_0_32px_-10px_hsl(12_100%_64%/0.4)]"
+          ? "bg-[hsl(259_80%_55%/0.10)]"
+          : "border-foreground/10 glass hover:-translate-y-1 hover:border-foreground/20 hover:shadow-[0_20px_40px_-14px_rgba(38,21,92,0.28)]"
       )}
       style={
         focused
@@ -352,12 +489,12 @@ function ActivityCard({
           }}
         >
           <Check className="h-3 w-3" strokeWidth={3} />
-          Selesai
+          {s.completed}
         </span>
       )}
 
       <h3 className="pr-20 text-base font-bold leading-snug tracking-tight text-foreground">
-        {activity.title}
+        {pick(activity.title, lang)}
       </h3>
 
       <div className="mt-3 flex flex-wrap gap-1.5">
@@ -365,21 +502,23 @@ function ActivityCard({
           className="rounded-full px-2.5 py-1 text-[11px] font-medium"
           style={{ background: `hsl(${TEAL} / 0.14)`, color: `hsl(${TEAL})` }}
         >
-          {ROUTINE_LABELS[activity.routine] ?? activity.routine}
+          {ROUTINE_LABELS[activity.routine]
+            ? pick(ROUTINE_LABELS[activity.routine], lang)
+            : activity.routine}
         </span>
       </div>
 
       {/* Perlu disediakan — things to prepare for this activity */}
-      {activity.materials.length > 0 && (
+      {pick(activity.materials, lang).length > 0 && (
         <div className="mt-3 w-full">
           <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Perlu disediakan
+            {s.needToPrepare}
           </p>
           <div className="flex flex-wrap gap-1.5">
-            {activity.materials.map((m) => (
+            {pick(activity.materials, lang).map((m) => (
               <span
                 key={m}
-                className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[11px] font-medium text-foreground/80"
+                className="rounded-full bg-[hsl(259_80%_55%/0.10)] px-2.5 py-1 text-[11px] font-medium text-foreground/80"
               >
                 {m}
               </span>
@@ -387,10 +526,6 @@ function ActivityCard({
           </div>
         </div>
       )}
-
-      <span className="mt-3 text-xs font-medium text-primary/90">
-        Lihat panduan →
-      </span>
     </button>
   )
 }
@@ -420,6 +555,8 @@ function ActivityDetail({
   onSaveRecord: (note: string, seconds?: number) => void
   onClose: () => void
 }) {
+  const { lang } = useLang()
+  const t = STR[lang]
   // Only the child's current stage is shown — that's the active pathway the
   // parent should run today.
   const content = activity.stages.find((s) => s.stage === childStage)
@@ -451,7 +588,7 @@ function ActivityDetail({
       <div
         role="dialog"
         aria-modal="true"
-        className="relative flex max-h-full w-full max-w-2xl animate-fade-up flex-col overflow-hidden rounded-3xl border border-white/10 bg-background/95 backdrop-blur-2xl"
+        className="relative flex max-h-full w-full max-w-2xl animate-fade-up flex-col overflow-hidden rounded-3xl border border-foreground/10 bg-background/95 backdrop-blur-2xl"
         style={{ animationFillMode: "both" }}
       >
         {showBoard ? (
@@ -474,16 +611,18 @@ function ActivityDetail({
                   className="rounded-full px-2 py-0.5 text-[10px] font-medium"
                   style={{ background: `hsl(${TEAL} / 0.14)`, color: `hsl(${TEAL})` }}
                 >
-                  {ROUTINE_LABELS[activity.routine] ?? activity.routine}
+                  {ROUTINE_LABELS[activity.routine]
+                    ? pick(ROUTINE_LABELS[activity.routine], lang)
+                    : activity.routine}
                 </span>
               </div>
-              <h2 className="text-lg font-bold tracking-tight">{activity.title}</h2>
+              <h2 className="text-lg font-bold tracking-tight">{pick(activity.title, lang)}</h2>
             </div>
             <button
               type="button"
               onClick={onClose}
-              aria-label="Tutup"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
+              aria-label={t.close}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
             >
               <X className="h-5 w-5" />
             </button>
@@ -491,10 +630,10 @@ function ActivityDetail({
 
           {/* Materials */}
           <div className="mt-3 flex flex-wrap gap-1.5">
-            {activity.materials.map((m) => (
+            {pick(activity.materials, lang).map((m) => (
               <span
                 key={m}
-                className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[11px] font-medium text-foreground/80"
+                className="rounded-full bg-[hsl(259_80%_55%/0.10)] px-2.5 py-1 text-[11px] font-medium text-foreground/80"
               >
                 {m}
               </span>
@@ -518,7 +657,7 @@ function ActivityDetail({
                   className="text-xs font-bold uppercase tracking-wider"
                   style={{ color: `hsl(${PURPLE_TEXT})` }}
                 >
-                  Refleksi Anda
+                  {t.yourReflection}
                 </h4>
                 {!editing && (
                   <button
@@ -534,7 +673,7 @@ function ActivityDetail({
                     }}
                   >
                     <Pencil className="h-3 w-3" />
-                    Edit
+                    {t.edit}
                   </button>
                 )}
               </div>
@@ -545,16 +684,16 @@ function ActivityDetail({
                     value={editNote}
                     onChange={(e) => setEditNote(e.target.value)}
                     rows={4}
-                    className="w-full resize-none rounded-2xl bg-white/[0.04] p-3 text-sm leading-relaxed text-foreground outline-none focus:ring-2 focus:ring-ring"
+                    className="w-full resize-none rounded-2xl bg-[hsl(259_80%_55%/0.06)] p-3 text-sm leading-relaxed text-foreground outline-none focus:ring-2 focus:ring-ring"
                     style={{ boxShadow: `inset 0 0 0 1px hsl(${PURPLE} / 0.3)` }}
                   />
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
                       onClick={() => setEditing(false)}
-                      className="rounded-2xl py-2.5 text-sm font-semibold text-foreground glass transition-all hover:bg-white/[0.08] active:scale-[0.99]"
+                      className="rounded-2xl py-2.5 text-sm font-semibold text-foreground glass transition-all hover:bg-foreground/5 active:scale-[0.99]"
                     >
-                      Batal
+                      {t.cancel}
                     </button>
                     <button
                       type="button"
@@ -567,7 +706,7 @@ function ActivityDetail({
                       className="rounded-2xl py-2.5 text-sm font-semibold text-background transition-all active:scale-[0.99] disabled:opacity-40"
                       style={{ background: `hsl(${PURPLE})` }}
                     >
-                      Simpan
+                      {t.save}
                     </button>
                   </div>
                 </div>
@@ -580,13 +719,13 @@ function ActivityDetail({
           )}
 
           {/* Situasi — set-up with (T)(P)(D) technique cues */}
-          {activity.setup && (
-            <div className="rounded-2xl bg-white/[0.03] p-3">
+          {pick(activity.setup, lang) && (
+            <div className="rounded-2xl bg-foreground/5 p-3">
               <h4 className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Situasi
+                {t.situation}
               </h4>
               <p className="text-sm leading-relaxed text-foreground/90">
-                {activity.setup}
+                {pick(activity.setup, lang)}
               </p>
             </div>
           )}
@@ -605,17 +744,16 @@ function ActivityDetail({
                 style={{ color: `hsl(${PURPLE_TEXT})` }}
               >
                 <Hand className="h-3.5 w-3.5" />
-                Model AAC (Aided Language Input)
+                {t.aacModel}
               </div>
               <p className="text-xs leading-relaxed text-foreground/85">
-                Sebut sambil sentuh perkataan ini pada Papan AAC. AAC dimodelkan,
-                bukan diuji — {relationship.toLowerCase()} tunjuk dahulu.
+                {t.aacModelNote(relationship.toLowerCase())}
               </p>
               <p
                 className="mt-2.5 text-[10px] font-bold uppercase tracking-wider"
                 style={{ color: `hsl(${PURPLE_TEXT})` }}
               >
-                Perkataan untuk digunakan
+                {t.wordsToUse}
               </p>
               <div className="mt-1.5 flex flex-wrap gap-1.5">
                 {activity.aacWords.map((w) => (
@@ -639,20 +777,20 @@ function ActivityDetail({
           <div>
             <h4 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               <Sparkles className="h-3.5 w-3.5 text-primary" />
-              Arahan {relationship}
+              {t.instructionFor(relationship)}
             </h4>
             <p className="rounded-2xl glass p-3 text-sm leading-relaxed text-foreground/90">
-              {content?.instructions}
+              {content && pick(content.instructions, lang)}
             </p>
           </div>
 
           {/* Skrip Dialog */}
           <div>
             <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Skrip Dialog
+              {t.dialogueScript}
             </h4>
             <div className="space-y-2">
-              {content?.dialogue.map((line, i) => (
+              {content && pick(content.dialogue, lang).map((line, i) => (
                 <div
                   key={i}
                   className="rounded-2xl rounded-tl-sm glass-strong px-3.5 py-2.5 text-sm leading-relaxed text-foreground/90"
@@ -664,7 +802,7 @@ function ActivityDetail({
           </div>
 
           {/* Isyarat Anak yang Dicari */}
-          {content?.targetSignal && (
+          {content?.targetSignal && pick(content.targetSignal, lang) && (
             <div
               className="rounded-2xl border-l-2 p-3"
               style={{
@@ -676,10 +814,10 @@ function ActivityDetail({
                 className="mb-1 text-xs font-semibold uppercase tracking-wider"
                 style={{ color: `hsl(${TEAL})` }}
               >
-                Isyarat Anak yang Dicari
+                {t.childSignalSought}
               </h4>
               <p className="text-sm leading-relaxed text-foreground/90">
-                {content.targetSignal}
+                {pick(content.targetSignal, lang)}
               </p>
             </div>
           )}
@@ -700,7 +838,7 @@ function ActivityDetail({
             ) : (
               <LayoutGrid className="h-4 w-4" />
             )}
-            {selected ? "Praktik AAC selesai — buka semula" : "Praktis dengan Papan AAC"}
+            {selected ? t.aacPracticeDone : t.practiseWithAacBoard}
           </button>
         </div>
 
@@ -711,17 +849,17 @@ function ActivityDetail({
               "flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-sm font-semibold",
               selected ? "glass text-foreground" : "text-muted-foreground"
             )}
-            style={selected ? undefined : { background: "hsl(0 0% 100% / 0.04)" }}
+            style={selected ? undefined : { background: "hsl(0 0% 0% / 0.04)" }}
           >
             {selected ? (
               <>
                 <Check className="h-4 w-4" strokeWidth={3} />
-                Selesai
+                {t.done}
               </>
             ) : (
               <>
                 <Lock className="h-4 w-4" />
-                Belum Selesai
+                {t.notDone}
               </>
             )}
           </div>
@@ -729,7 +867,7 @@ function ActivityDetail({
           {!selected && (
             <p className="mt-2 flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
               <Hand className="h-3.5 w-3.5 shrink-0" style={{ color: `hsl(${PURPLE_TEXT})` }} />
-              Praktis dengan Papan AAC & tulis refleksi untuk selesaikan.
+              {t.practiseToComplete}
             </p>
           )}
         </div>
@@ -777,7 +915,7 @@ export function ActivityBoardModal({
       <div
         role="dialog"
         aria-modal="true"
-        className="relative flex max-h-full w-full max-w-2xl animate-fade-up flex-col overflow-hidden rounded-3xl border border-white/10 bg-background/95 backdrop-blur-2xl"
+        className="relative flex max-h-full w-full max-w-2xl animate-fade-up flex-col overflow-hidden rounded-3xl border border-foreground/10 bg-background/95 backdrop-blur-2xl"
         style={{ animationFillMode: "both" }}
       >
         <ActivityAacBoardView
@@ -822,6 +960,8 @@ function ActivityAacBoardView({
    *  which shows its own follow-up nudge instead. */
   skipMotivation?: boolean
 }) {
+  const { lang } = useLang()
+  const t = STR[lang]
   const [strip, setStrip] = useState<AacWord[]>([])
   // Words tapped at least once — practice is verified when all are used. When
   // reopening a completed activity, every word starts already checked.
@@ -878,7 +1018,9 @@ function ActivityAacBoardView({
       onQuit()
       return
     }
-    setMotivation(MOTIVATIONS[Math.floor(Math.random() * MOTIVATIONS.length)])
+    setMotivation(
+      t.motivations[Math.floor(Math.random() * t.motivations.length)]
+    )
     setLeaving(true)
     window.setTimeout(onQuit, 2000)
   }
@@ -925,22 +1067,22 @@ function ActivityAacBoardView({
         <button
           type="button"
           onClick={tryClose}
-          aria-label="Kembali ke panduan"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
+          aria-label={t.backToGuide}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
         >
           <ChevronLeft className="h-5 w-5" />
         </button>
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-sm font-bold tracking-tight">Papan AAC</h2>
+          <h2 className="truncate text-sm font-bold tracking-tight">{t.aacBoard}</h2>
           <p className="truncate text-xs text-muted-foreground">
-            {activity.title}
+            {pick(activity.title, lang)}
           </p>
         </div>
         <button
           type="button"
           onClick={tryClose}
-          aria-label="Tutup papan AAC"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
+          aria-label={t.closeAacBoard}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
         >
           <X className="h-5 w-5" />
         </button>
@@ -959,10 +1101,9 @@ function ActivityAacBoardView({
             <LayoutGrid className="h-9 w-9" style={{ color: `hsl(${PURPLE_TEXT})` }} />
           </span>
           <div>
-            <h3 className="text-base font-bold tracking-tight">Praktis di Papan AAC</h3>
+            <h3 className="text-base font-bold tracking-tight">{t.practiseOnAacBoard}</h3>
             <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-              Tekan Mula, kemudian praktis bersama anak sekurang-kurangnya{" "}
-              {AAC_MIN_SECONDS} saat.
+              {t.startPrompt(AAC_MIN_SECONDS)}
             </p>
           </div>
           <button
@@ -975,7 +1116,7 @@ function ActivityAacBoardView({
             }}
           >
             <Play className="h-3.5 w-3.5" fill="currentColor" />
-            Mula
+            {t.start}
           </button>
         </div>
       ) : (
@@ -989,13 +1130,13 @@ function ActivityAacBoardView({
           >
             {strip.length === 0 ? (
               <span className="shrink-0 px-2 text-sm text-muted-foreground">
-                Ketik simbol untuk membina ayat…
+                {t.tapToBuild}
               </span>
             ) : (
               strip.map((tile, i) => (
                 <span
                   key={`${tile.label}-${i}`}
-                  className="flex shrink-0 items-center gap-1.5 rounded-xl bg-white/[0.06] px-2.5 py-1.5 text-sm font-medium"
+                  className="flex shrink-0 items-center gap-1.5 rounded-xl bg-[hsl(259_80%_55%/0.10)] px-2.5 py-1.5 text-sm font-medium"
                 >
                   <span aria-hidden>{tile.emoji}</span>
                   {tile.label}
@@ -1005,7 +1146,7 @@ function ActivityAacBoardView({
           </div>
           <button
             type="button"
-            aria-label="Sebut ayat"
+            aria-label={t.speakSentence}
             onClick={speak}
             disabled={strip.length === 0}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-background transition-transform active:scale-95 disabled:opacity-40"
@@ -1018,10 +1159,10 @@ function ActivityAacBoardView({
           </button>
           <button
             type="button"
-            aria-label="Padam ayat"
+            aria-label={t.clearSentence}
             onClick={() => setStrip([])}
             disabled={strip.length === 0}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground disabled:opacity-40"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground disabled:opacity-40"
           >
             <Trash2 className="h-5 w-5" />
           </button>
@@ -1031,15 +1172,13 @@ function ActivityAacBoardView({
       {/* Practice progress — words tapped + on-board timer */}
       <div className="flex shrink-0 items-center justify-between gap-2 px-4 pt-3">
         <span className="min-w-0 flex-1 text-xs font-medium text-muted-foreground">
-          {done
-            ? "Tulis refleksi di bawah untuk selesaikan."
-            : "Teruskan bermain bersama anak…"}
+          {done ? t.writeReflectionBelow : t.keepPlaying}
         </span>
         <div className="flex shrink-0 items-center gap-1.5">
           <span
             className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold"
             style={{
-              background: timeReached ? `hsl(${PURPLE} / 0.22)` : "hsl(0 0% 100% / 0.06)",
+              background: timeReached ? `hsl(${PURPLE} / 0.22)` : "hsl(var(--foreground) / 0.06)",
               color: timeReached ? `hsl(${PURPLE_TEXT})` : "hsl(var(--muted-foreground))",
             }}
           >
@@ -1049,7 +1188,7 @@ function ActivityAacBoardView({
           <span
             className="rounded-full px-2 py-0.5 text-[11px] font-bold"
             style={{
-              background: allUsed ? `hsl(${PURPLE} / 0.22)` : "hsl(0 0% 100% / 0.06)",
+              background: allUsed ? `hsl(${PURPLE} / 0.22)` : "hsl(var(--foreground) / 0.06)",
               color: allUsed ? `hsl(${PURPLE_TEXT})` : "hsl(var(--muted-foreground))",
             }}
           >
@@ -1068,7 +1207,7 @@ function ActivityAacBoardView({
                 key={tile.label}
                 type="button"
                 onClick={() => tap(tile)}
-                className="relative flex aspect-square flex-col items-center justify-center gap-1.5 rounded-2xl glass-strong transition-all hover:bg-white/[0.09] active:scale-95"
+                className="relative flex aspect-square flex-col items-center justify-center gap-1.5 rounded-2xl glass-strong transition-all hover:bg-[hsl(259_80%_55%/0.08)] active:scale-95"
                 style={{
                   boxShadow: `inset 0 0 0 1px hsl(${PURPLE} / ${isUsed ? 0.6 : 0.25})`,
                 }}
@@ -1115,8 +1254,8 @@ function ActivityAacBoardView({
                 M
               </span>
               <div className="rounded-2xl rounded-tl-sm glass-strong px-4 py-3 text-sm leading-relaxed text-foreground/90">
-                <span className="font-semibold">Maya: </span>
-                {MAYA_REFLECTION_PROMPT}
+                <span className="font-semibold">{t.maya}</span>
+                {pick(MAYA_REFLECTION_PROMPT, lang)}
               </div>
             </div>
 
@@ -1124,8 +1263,8 @@ function ActivityAacBoardView({
               value={note}
               onChange={(e) => setNote(e.target.value)}
               rows={4}
-              placeholder="Tulis pemerhatian atau perasaan anda di sini…"
-              className="w-full resize-none rounded-2xl bg-white/[0.04] p-4 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground/80 outline-none focus:ring-2 focus:ring-ring"
+              placeholder={t.reflectionPlaceholder}
+              className="w-full resize-none rounded-2xl bg-[hsl(259_80%_55%/0.06)] p-4 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground/80 outline-none focus:ring-2 focus:ring-ring"
               style={{ boxShadow: `inset 0 0 0 1px hsl(${PURPLE} / 0.3)` }}
             />
 
@@ -1140,12 +1279,10 @@ function ActivityAacBoardView({
               }}
             >
               <Check className="h-4 w-4" strokeWidth={3} />
-              Simpan &amp; Selesai
+              {t.saveAndFinish}
             </button>
             <p className="text-center text-xs text-muted-foreground">
-              {note.trim()
-                ? "Nota ini disimpan untuk rekod perkembangan anak anda."
-                : "Tulis pemerhatian anda untuk menyelesaikan aktiviti."}
+              {note.trim() ? t.noteSaved : t.writeToComplete}
             </p>
           </div>
         )}
@@ -1177,7 +1314,7 @@ function ActivityAacBoardView({
               color: `hsl(${PURPLE_TEXT})`,
             }}
           >
-            Kita dah berjaya hari ini! 🎉
+            {t.celebration}
           </p>
         </div>
       )}
@@ -1198,7 +1335,7 @@ function ActivityAacBoardView({
             <Check className="h-8 w-8" strokeWidth={3} style={{ color: `hsl(${PURPLE_TEXT})` }} />
           </span>
           <p className="text-base font-bold" style={{ color: `hsl(${PURPLE_TEXT})` }}>
-            Disimpan! Syabas 🎉
+            {t.savedWellDone}
           </p>
         </div>
       )}
@@ -1214,23 +1351,24 @@ function ActivityAacBoardView({
           <div
             role="dialog"
             aria-modal="true"
-            className="relative w-full max-w-sm animate-fade-up rounded-3xl border border-white/10 bg-background/95 p-5 backdrop-blur-2xl"
+            className="relative w-full max-w-sm animate-fade-up rounded-3xl border border-foreground/10 bg-background/95 p-5 backdrop-blur-2xl"
             style={{ animationFillMode: "both" }}
           >
-            <h3 className="text-base font-bold tracking-tight">Tutup tanpa selesai?</h3>
+            <h3 className="text-base font-bold tracking-tight">{t.closeWithoutFinishing}</h3>
             <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-              Anda belum menyimpan refleksi. Jika tutup sekarang, masa dan praktis
-              ini <span className="font-semibold text-foreground">tidak akan disimpan</span> —
-              anda perlu mengulang semula selama {AAC_MIN_SECONDS} saat kali
-              seterusnya.
+              {t.closeWarning(AAC_MIN_SECONDS).before}
+              <span className="font-semibold text-foreground">
+                {t.closeWarning(AAC_MIN_SECONDS).bold}
+              </span>
+              {t.closeWarning(AAC_MIN_SECONDS).after}
             </p>
             <div className="mt-4 grid grid-cols-2 gap-2.5">
               <button
                 type="button"
                 onClick={() => setConfirmClose(false)}
-                className="rounded-2xl py-3 text-sm font-semibold text-foreground glass transition-all hover:bg-white/[0.08] active:scale-[0.99]"
+                className="rounded-2xl py-3 text-sm font-semibold text-foreground glass transition-all hover:bg-foreground/5 active:scale-[0.99]"
               >
-                Teruskan
+                {t.continue}
               </button>
               <button
                 type="button"
@@ -1238,7 +1376,7 @@ function ActivityAacBoardView({
                 className="rounded-2xl py-3 text-sm font-semibold text-background transition-all active:scale-[0.99]"
                 style={{ background: `hsl(${CORAL})` }}
               >
-                Tutup
+                {t.closeConfirm}
               </button>
             </div>
           </div>

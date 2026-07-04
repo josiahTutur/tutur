@@ -3,6 +3,7 @@ import { STAGE_INFO, STAGE_ORDER } from "@/lib/activities"
 import { GOALS } from "@/lib/goals"
 import { currentStreak, lastNDaysCompletion } from "@/lib/progress"
 import ProgressCalendar from "@/components/ProgressCalendar"
+import { useLang, pick } from "@/lib/i18n"
 import {
   Flame,
   Clock,
@@ -12,6 +13,81 @@ import {
   Target,
   Sparkles,
 } from "lucide-react"
+
+/* -------------------------------------------------------------------------- */
+/*  Localised strings (co-located)                                            */
+/* -------------------------------------------------------------------------- */
+
+const STR = {
+  ms: {
+    headingPrefix: "Analisis Perkembangan",
+    headerSubtitle:
+      "Pantau dua perkara penting — konsistensi anda dan perkembangan anak.",
+    activeGoalLabel: "Matlamat aktif: ",
+    statStreakLabel: "Streak harian",
+    statMinutesLabel: "Minit minggu ini",
+    statActivitiesLabel: "Aktiviti selesai (30h)",
+    statNewWordsLabel: "Perkataan baharu",
+    sectionConsistency: "Konsistensi Anda",
+    sectionChildProgress: "Perkembangan Anak",
+    weeklyMinutesTitle: "Minit Intervensi Mingguan",
+    weeklyMinutesSubtitle: (t: number) =>
+      `Sasaran ${t} minit sehari (3 aktiviti × 5 minit).`,
+    chartTarget: (t: number) => `Sasaran ${t}m`,
+    vocabTitle: "Perkembangan Kosa Kata",
+    vocabSubtitle: "Jumlah terkumpul perkataan & 'aha moment' baharu.",
+    stageTitle: "Kemajuan Tahap Komunikasi",
+    stageSubtitle: "Perjalanan anak merentasi 5 tahap komunikasi.",
+    focusTitle: "Fokus Latihan",
+    focusSubtitle: "Pecahan masa latihan mengikut strategi minggu ini.",
+    weeksAgo: "8 minggu lepas",
+    week1: "Minggu 1",
+    now: "Kini",
+    stageWord: "Tahap",
+    dayLabels: ["Isn", "Sel", "Rab", "Kha", "Jum", "Sab", "Ahd"],
+    skillFocusNames: [
+      "Bercakap Banyak",
+      "Tunggu & Beri Ruang",
+      "Ulang & Kembang",
+      "Soalan WH & Naratif",
+    ],
+    defaultChildName: "anak anda",
+  },
+  en: {
+    headingPrefix: "Progress Analysis",
+    headerSubtitle:
+      "Keep an eye on two things that matter — your consistency and your child's progress.",
+    activeGoalLabel: "Active goal: ",
+    statStreakLabel: "Daily streak",
+    statMinutesLabel: "Minutes this week",
+    statActivitiesLabel: "Activities done (30d)",
+    statNewWordsLabel: "New words",
+    sectionConsistency: "Your Consistency",
+    sectionChildProgress: "Your Child's Progress",
+    weeklyMinutesTitle: "Weekly Intervention Minutes",
+    weeklyMinutesSubtitle: (t: number) =>
+      `Target ${t} minutes a day (3 activities × 5 minutes).`,
+    chartTarget: (t: number) => `Target ${t}m`,
+    vocabTitle: "Vocabulary Growth",
+    vocabSubtitle: "Total new words & 'aha moments' gathered along the way.",
+    stageTitle: "Communication Stage Progress",
+    stageSubtitle: "Your child's journey across the 5 communication stages.",
+    focusTitle: "Practice Focus",
+    focusSubtitle: "How this week's practice time was split across strategies.",
+    weeksAgo: "past 8 weeks",
+    week1: "Week 1",
+    now: "Now",
+    stageWord: "Stage",
+    dayLabels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    skillFocusNames: [
+      "Talk a Lot",
+      "Wait & Give Space",
+      "Repeat & Expand",
+      "WH Questions & Storytelling",
+    ],
+    defaultChildName: "your child",
+  },
+} as const
 
 /* ========================================================================== *
  *  AnalysisView — parent-facing progress analytics (Analisis Perkembangan).
@@ -25,9 +101,9 @@ import {
  *  live data is a matter of replacing the constants below.
  * ========================================================================== */
 
-const CORAL = "12 100% 64%"
-const TEAL = "172 66% 50%"
-const PURPLE = "270 95% 65%"
+const CORAL = "259 80% 55%"
+const TEAL = "180 68% 34%"
+const PURPLE = "247 74% 63%"
 
 /* -------------------------------------------------------------------------- */
 /*  Representative data (pre-backend)                                          */
@@ -35,7 +111,6 @@ const PURPLE = "270 95% 65%"
 
 const DAILY_TARGET_MIN = 15 // 3 activities × 5 min
 
-const DAY_LABELS = ["Isn", "Sel", "Rab", "Kha", "Jum", "Sab", "Ahd"] as const
 // Intervention minutes logged each day this week.
 const WEEK_MINUTES = [15, 20, 15, 10, 20, 15, 15]
 
@@ -46,13 +121,9 @@ const LAST_30_DAYS = lastNDaysCompletion(30)
 // Cumulative new words / spontaneous communication wins, by week (8 weeks).
 const WORDS_BY_WEEK = [2, 5, 9, 12, 16, 19, 22, 26]
 
-// Where this week's practice time went, by core strategy.
-const SKILL_FOCUS = [
-  { name: "Bercakap Banyak", pct: 38 },
-  { name: "Tunggu & Beri Ruang", pct: 27 },
-  { name: "Ulang & Kembang", pct: 20 },
-  { name: "Soalan WH & Naratif", pct: 15 },
-]
+// Where this week's practice time went, by core strategy. Display names live
+// in the STR table (skillFocusNames), indexed positionally.
+const SKILL_FOCUS = [{ pct: 38 }, { pct: 27 }, { pct: 20 }, { pct: 15 }]
 
 const CURRENT_STREAK = currentStreak() // consecutive days with ≥1 activity
 const WITHIN_STAGE_PCT = 60 // progress through the current stage
@@ -75,7 +146,9 @@ export default function AnalysisView({
   /** Live total seconds spent on today's activities. */
   todaySeconds?: number
 }) {
-  const childName = profile?.childName?.trim() || "anak anda"
+  const { lang } = useLang()
+  const s = STR[lang]
+  const childName = profile?.childName?.trim() || s.defaultChildName
   const stage = Math.min(Math.max(profile?.stage ?? 1, 1), 5)
   const activeGoal = GOALS.find((g) => g.code === goal)
 
@@ -89,10 +162,10 @@ export default function AnalysisView({
         {/* Header */}
         <header>
           <h2 className="text-lg font-bold tracking-tight">
-            Analisis Perkembangan {childName}
+            {s.headingPrefix} {childName}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Pantau dua perkara penting — konsistensi anda dan perkembangan anak.
+            {s.headerSubtitle}
           </p>
         </header>
 
@@ -110,8 +183,8 @@ export default function AnalysisView({
               style={{ color: `hsl(${CORAL})` }}
             />
             <p className="text-sm text-foreground/90">
-              <span className="text-muted-foreground">Matlamat aktif: </span>
-              <span className="font-semibold">“{activeGoal.aspiration}”</span>
+              <span className="text-muted-foreground">{s.activeGoalLabel}</span>
+              <span className="font-semibold">“{pick(activeGoal.aspiration, lang)}”</span>
             </p>
           </div>
         )}
@@ -121,31 +194,31 @@ export default function AnalysisView({
           <StatCard
             icon={Flame}
             hue={CORAL}
-            value={`${CURRENT_STREAK} hari`}
-            label="Streak harian"
+            value={`${CURRENT_STREAK} ${lang === "ms" ? "hari" : "days"}`}
+            label={s.statStreakLabel}
           />
           <StatCard
             icon={Clock}
             hue={TEAL}
             value={`${weekTotal} min`}
-            label="Minit minggu ini"
+            label={s.statMinutesLabel}
           />
           <StatCard
             icon={CheckCircle2}
             hue={TEAL}
             value={`${activitiesDone}`}
-            label="Aktiviti selesai (30h)"
+            label={s.statActivitiesLabel}
           />
           <StatCard
             icon={MessageCircle}
             hue={PURPLE}
             value={`+${newWords}`}
-            label="Perkataan baharu"
+            label={s.statNewWordsLabel}
           />
         </div>
 
         {/* ----------------------- Track 1 — Konsistensi ----------------------- */}
-        <SectionLabel>Konsistensi Anda</SectionLabel>
+        <SectionLabel>{s.sectionConsistency}</SectionLabel>
 
         {/* Daily-completion calendar — only real completions show; past days
             stay neutral (no placeholder) until truly done. */}
@@ -158,20 +231,20 @@ export default function AnalysisView({
         {/* Weekly intervention minutes vs target */}
         <Card
           icon={Clock}
-          title="Minit Intervensi Mingguan"
-          subtitle={`Sasaran ${DAILY_TARGET_MIN} minit sehari (3 aktiviti × 5 minit).`}
+          title={s.weeklyMinutesTitle}
+          subtitle={s.weeklyMinutesSubtitle(DAILY_TARGET_MIN)}
         >
           <WeeklyMinutesChart />
         </Card>
 
         {/* ---------------------- Track 2 — Perkembangan ----------------------- */}
-        <SectionLabel>Perkembangan Anak</SectionLabel>
+        <SectionLabel>{s.sectionChildProgress}</SectionLabel>
 
         {/* Cumulative new-words growth */}
         <Card
           icon={TrendingUp}
-          title="Perkembangan Kosa Kata"
-          subtitle="Jumlah terkumpul perkataan & 'aha moment' baharu."
+          title={s.vocabTitle}
+          subtitle={s.vocabSubtitle}
         >
           <WordsGrowthChart total={newWords} />
         </Card>
@@ -179,8 +252,8 @@ export default function AnalysisView({
         {/* Communication stage progress */}
         <Card
           icon={Sparkles}
-          title="Kemajuan Tahap Komunikasi"
-          subtitle="Perjalanan anak merentasi 5 tahap komunikasi."
+          title={s.stageTitle}
+          subtitle={s.stageSubtitle}
         >
           <StageProgress stage={stage} />
         </Card>
@@ -188,8 +261,8 @@ export default function AnalysisView({
         {/* Practice focus breakdown */}
         <Card
           icon={Target}
-          title="Fokus Latihan"
-          subtitle="Pecahan masa latihan mengikut strategi minggu ini."
+          title={s.focusTitle}
+          subtitle={s.focusSubtitle}
         >
           <SkillFocus />
         </Card>
@@ -221,7 +294,7 @@ function StatCard({
       >
         <Icon className="h-5 w-5" />
       </span>
-      <p className="mt-3 text-xl font-bold tracking-tight">{value}</p>
+      <p className="mt-3 font-display text-xl font-bold tracking-tight">{value}</p>
       <p className="mt-0.5 text-xs text-muted-foreground">{label}</p>
     </div>
   )
@@ -276,6 +349,8 @@ function Card({
 /* -------------------------------------------------------------------------- */
 
 function WeeklyMinutesChart() {
+  const { lang } = useLang()
+  const s = STR[lang]
   const chartMax = 30 // headroom above the 15-min target
   const targetPct = (DAILY_TARGET_MIN / chartMax) * 100
 
@@ -294,7 +369,7 @@ function WeeklyMinutesChart() {
             className="absolute -top-2 right-0 rounded-full bg-background/80 px-1.5 text-[10px] font-medium"
             style={{ color: `hsl(${CORAL})` }}
           >
-            Sasaran {DAILY_TARGET_MIN}m
+            {s.chartTarget(DAILY_TARGET_MIN)}
           </span>
         </div>
 
@@ -326,7 +401,7 @@ function WeeklyMinutesChart() {
 
       {/* Day labels */}
       <div className="mt-2 flex gap-2">
-        {DAY_LABELS.map((d) => (
+        {s.dayLabels.map((d) => (
           <span
             key={d}
             className="flex-1 text-center text-[10px] text-muted-foreground"
@@ -344,6 +419,8 @@ function WeeklyMinutesChart() {
 /* -------------------------------------------------------------------------- */
 
 function WordsGrowthChart({ total }: { total: number }) {
+  const { lang } = useLang()
+  const s = STR[lang]
   const scaleMax = Math.ceil((total + 2) / 5) * 5
   const n = WORDS_BY_WEEK.length
   const pts = WORDS_BY_WEEK.map((v, i) => {
@@ -359,8 +436,8 @@ function WordsGrowthChart({ total }: { total: number }) {
   return (
     <div>
       <div className="flex items-end justify-between">
-        <p className="text-2xl font-bold tracking-tight">{total}</p>
-        <p className="text-xs text-muted-foreground">8 minggu lepas</p>
+        <p className="font-display text-2xl font-bold tracking-tight">{total}</p>
+        <p className="text-xs text-muted-foreground">{s.weeksAgo}</p>
       </div>
 
       <svg
@@ -387,8 +464,8 @@ function WordsGrowthChart({ total }: { total: number }) {
       </svg>
 
       <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
-        <span>Minggu 1</span>
-        <span>Kini</span>
+        <span>{s.week1}</span>
+        <span>{s.now}</span>
       </div>
     </div>
   )
@@ -399,6 +476,8 @@ function WordsGrowthChart({ total }: { total: number }) {
 /* -------------------------------------------------------------------------- */
 
 function StageProgress({ stage }: { stage: number }) {
+  const { lang } = useLang()
+  const s = STR[lang]
   const current = STAGE_INFO[STAGE_ORDER[stage - 1]]
 
   return (
@@ -422,7 +501,7 @@ function StageProgress({ stage }: { stage: number }) {
                           color: `hsl(${CORAL})`,
                           boxShadow: `0 0 0 2px hsl(${CORAL} / 0.5)`,
                         }
-                      : { background: "hsl(0 0% 100% / 0.05)", color: "hsl(var(--muted-foreground))" }
+                      : { background: "hsl(259 80% 55% / 0.08)", color: "hsl(var(--muted-foreground))" }
                 }
               >
                 {num}
@@ -433,7 +512,7 @@ function StageProgress({ stage }: { stage: number }) {
                   style={{
                     background: done
                       ? `hsl(${TEAL} / 0.4)`
-                      : "hsl(0 0% 100% / 0.08)",
+                      : "hsl(var(--foreground) / 0.08)",
                   }}
                 />
               )}
@@ -446,13 +525,13 @@ function StageProgress({ stage }: { stage: number }) {
       <div>
         <div className="mb-1.5 flex items-center justify-between">
           <span className="text-sm font-semibold">
-            Tahap {stage} · {current.name}
+            {s.stageWord} {stage} · {pick(current.name, lang)}
           </span>
           <span className="text-xs font-medium" style={{ color: `hsl(${CORAL})` }}>
             {WITHIN_STAGE_PCT}%
           </span>
         </div>
-        <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+        <div className="h-2 w-full overflow-hidden rounded-full bg-foreground/10">
           <div
             className="h-full rounded-full"
             style={{
@@ -461,7 +540,7 @@ function StageProgress({ stage }: { stage: number }) {
             }}
           />
         </div>
-        <p className="mt-2 text-xs text-muted-foreground">{current.goal}</p>
+        <p className="mt-2 text-xs text-muted-foreground">{pick(current.goal, lang)}</p>
       </div>
     </div>
   )
@@ -472,24 +551,29 @@ function StageProgress({ stage }: { stage: number }) {
 /* -------------------------------------------------------------------------- */
 
 function SkillFocus() {
+  const { lang } = useLang()
+  const s = STR[lang]
   return (
     <div className="space-y-3">
-      {SKILL_FOCUS.map((s) => (
-        <div key={s.name}>
-          <div className="mb-1 flex items-center justify-between">
-            <span className="text-xs font-medium text-foreground/90">
-              {s.name}
-            </span>
-            <span className="text-xs text-muted-foreground">{s.pct}%</span>
+      {SKILL_FOCUS.map((focus, i) => {
+        const name = s.skillFocusNames[i]
+        return (
+          <div key={name}>
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-xs font-medium text-foreground/90">
+                {name}
+              </span>
+              <span className="text-xs text-muted-foreground">{focus.pct}%</span>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-foreground/10">
+              <div
+                className="h-full rounded-full"
+                style={{ width: `${focus.pct}%`, background: `hsl(${TEAL} / 0.8)` }}
+              />
+            </div>
           </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
-            <div
-              className="h-full rounded-full"
-              style={{ width: `${s.pct}%`, background: `hsl(${TEAL} / 0.8)` }}
-            />
-          </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

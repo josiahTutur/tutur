@@ -56,8 +56,12 @@ export default function ParticleMessages({
     let index = 0
     let phase: "wait" | "in" | "hold" | "out" | "idle" = "wait"
     let phaseStart = 0
+    // Crisp copy for the readable "hold" phase (particles only animate in/out).
+    let lineRows: string[] = []
+    let linePx = 0
+    let lineColor = "rgba(38,21,92,0.95)"
     const font = (px: number) =>
-      `600 ${px}px ui-sans-serif, system-ui, -apple-system, sans-serif`
+      `600 ${px}px 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif`
 
     function resize() {
       const r = cv.getBoundingClientRect()
@@ -119,6 +123,12 @@ export default function ParticleMessages({
       const data = o.getImageData(0, 0, W, H).data
       const step = Math.max(2, Math.round(1.4 * dpr))
       const last = i === lines.length - 1
+
+      // Remember the crisp layout so the "hold" phase can render solid text.
+      lineRows = rows
+      linePx = px
+      // Tutur Violet for the story; the punchline line goes a shade deeper.
+      lineColor = last ? "#5215C9" : "#6A2FE8"
       for (let yy = 0; yy < H; yy += step) {
         for (let xx = 0; xx < W; xx += step) {
           if (data[(yy * W + xx) * 4 + 3] < 80) continue
@@ -132,9 +142,8 @@ export default function ParticleMessages({
             spd: 0.4 + Math.random() * 0.9,
             fade: 0.85 + Math.random() * 1.4,
             phase: Math.random() * Math.PI * 2,
-            color: last
-              ? `hsl(${262 + Math.random() * 26} 90% 76%)`
-              : "rgba(236,238,252,0.95)",
+            // Purple throughout — Tutur Violet, with the punchline a shade deeper.
+            color: last ? "#5215C9" : "#6A2FE8",
           })
         }
       }
@@ -151,6 +160,23 @@ export default function ParticleMessages({
       const W = cv.width
       const H = cv.height
       c.clearRect(0, 0, W, H)
+
+      // While holding, draw the line as crisp, solid text — fully readable.
+      if (mode === "hold") {
+        c.globalAlpha = 1
+        c.textAlign = "center"
+        c.textBaseline = "middle"
+        c.font = font(linePx)
+        c.fillStyle = lineColor
+        const lineH = linePx * 1.25
+        let ty = H / 2 - (lineRows.length * lineH) / 2 + lineH / 2
+        for (const row of lineRows) {
+          c.fillText(row, W / 2, ty)
+          ty += lineH
+        }
+        return
+      }
+
       for (const p of particles) {
         let x: number
         let y: number

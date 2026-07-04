@@ -2,15 +2,26 @@ import { useEffect, useState } from "react"
 import { Loader2 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import {
+  deleteAccount,
   ensureProfile,
+  isAccountDeleted,
   loadOnboarding,
   saveOnboarding,
   saveProfile,
 } from "@/lib/db"
+import {
+  loadProgress,
+  saveProgress,
+  clearProgress,
+  isResumableView,
+} from "@/lib/onboardingProgress"
+import { recordLoginDay } from "@/lib/progress"
 import Intro from "@/components/Intro"
 import Auth from "@/components/Auth"
-import OnboardingStory from "@/components/OnboardingStory"
-import Chat from "@/components/Chat"
+import Welcome, { clearWelcomeProgress } from "@/components/Welcome"
+import StageIntro, { clearStageIntroProgress } from "@/components/StageIntro"
+import JoinChild from "@/components/JoinChild"
+import Chat, { clearChatProgress } from "@/components/Chat"
 import ProfilingResults from "@/components/ProfilingResults"
 import GoalSelection from "@/components/GoalSelection"
 import RoutineSelection from "@/components/RoutineSelection"
@@ -41,11 +52,12 @@ function profileFromAnswers(answers: string[], email: string): Profile {
  * real router (e.g. React Router / TanStack Router) once URLs & deep-linking
  * are needed.
  *
- * Flow:  intro ─▶ auth ─▶ [story] ─▶ chat (AI profiling) ─▶ results ─▶ goals
- *        ─▶ routines ─▶ activities ─▶ hub
+ * Flow:  intro ─▶ auth ─▶ welcome ─▶ stageIntro ─▶ chat (AI profiling)
+ *        ─▶ results ─▶ goals ─▶ routines ─▶ activities ─▶ hub
  *
- * The `story` onboarding narrative is shown only to brand-new registrations.
- * Returning users skip straight from auth to the chat profiling stage.
+ * `stageIntro` teaches the 5 communication stages, then forks: the parent either
+ * picks their child's stage manually (→ straight to the hub) or takes the
+ * 15-question assessment (→ chat → results → goals…).
  *
  * After the communication-stage analysis (results), the parent picks a primary
  * goal (goals), their daily routines (routines), and the intervention
@@ -55,7 +67,9 @@ function profileFromAnswers(answers: string[], email: string): Profile {
 export type View =
   | "intro"
   | "auth"
-  | "story"
+  | "welcome"
+  | "join"
+  | "stageIntro"
   | "chat"
   | "results"
   | "goals"
@@ -63,11 +77,30 @@ export type View =
   | "activities"
   | "hub"
 
+/** Read an invite code from the URL (?code=… or ?join=…), if present. */
+function readInviteCodeFromUrl(): string | null {
+  try {
+    const params = new URLSearchParams(window.location.search)
+    const c = params.get("code") ?? params.get("join")
+    return c ? c.trim() : null
+  } catch {
+    return null
+  }
+}
+
 export default function App() {
   const [view, setView] = useState<View>("intro")
 
+  // Invite code captured from a shared link (?code=…) — routes a co-parent to
+  // the Join screen once they're authenticated.
+  const [pendingCode] = useState<string | null>(readInviteCodeFromUrl)
+
   // Raw answers from the 16 profiling questions, handed to the scoring engine.
   const [profilingAnswers, setProfilingAnswers] = useState<string[]>([])
+
+  // The 5 answers collected in the founding welcome — carried into profiling so
+  // those first questions are never re-asked.
+  const [welcomeAnswers, setWelcomeAnswers] = useState<string[]>([])
 
   // Assembled child/guardian profile. Undefined until set (via the demo
   // shortcut today; via real sign-in + profiling once those are wired up).
@@ -88,6 +121,9 @@ export default function App() {
   // The signed-in user's email — stamped onto the profile built from profiling.
   const [userEmail, setUserEmail] = useState("")
 
+  // Which Auth form to open: "signup" from the CTA, "login" from the Sign In link.
+  const [authMode, setAuthMode] = useState<"login" | "signup">("login")
+
   // Brief splash while we check the session on first load, so we don't flash the
   // intro before deciding where a signed-in user belongs.
   const [booting, setBooting] = useState(true)
@@ -99,35 +135,69 @@ export default function App() {
     let cancelled = false
 
     async function resume() {
+      // A soft-deleted account must never resume — bounce the session out.
+      if (await isAccountDeleted()) {
+        await supabase.auth.signOut()
+        clearProgress()
+        clearWelcomeProgress()
+        clearStageIntroProgress()
+        clearChatProgress()
+        if (!cancelled) setView("intro")
+        return
+      }
       await ensureProfile() // guarantee the profile row exists before anything
       const ob = await loadOnboarding()
-      if (cancelled || !ob) return
-      // Rebuild the profile from saved data so ProfileView shows real values.
-      setProfile({
-        childName: ob.childName ?? "",
-        childAge: ob.childAge ?? "",
-        guardianName: ob.guardianName ?? "",
-        relationship: ob.relationship ?? "",
-        guardianAge: ob.guardianAge ?? "",
-        stage: ob.stage ?? 1,
-        email: ob.email ?? "",
-        profiledAt: ob.profiledAt ?? "",
-      })
-      if (ob.activities.length > 0) {
-        // Onboarding already done → restore selections and jump to the hub.
+      if (cancelled) return
+
+      // Rebuild the profile from saved data so ProfileView shows real values
+      // (names/stage may exist from a completed profiling or a manual pick).
+      if (ob) {
+        setProfile({
+          childName: ob.childName ?? "",
+          childAge: ob.childAge ?? "",
+          guardianName: ob.guardianName ?? "",
+          relationship: ob.relationship ?? "",
+          guardianAge: ob.guardianAge ?? "",
+          stage: ob.stage ?? 1,
+          email: ob.email ?? "",
+          profiledAt: ob.profiledAt ?? "",
+        })
+      }
+
+      // Onboarding fully done (activities saved) → the hub is authoritative.
+      if (ob && ob.activities.length > 0) {
         setGoal(ob.goal)
         setRoutines(ob.routines)
         setActivities(ob.activities)
+        clearProgress() // mirror is stale now; hub is the source of truth
         setView((v) => (v === "intro" || v === "auth" ? "hub" : v))
-      } else {
-        setView((v) => (v === "intro" || v === "auth" ? "story" : v))
+        return
       }
+
+      // Otherwise resume from locally-saved progress (survives a mid-onboarding
+      // refresh, incl. a manual stage pick that jumped straight to the hub).
+      const local = loadProgress()
+      if (local) {
+        setWelcomeAnswers(local.welcomeAnswers ?? [])
+        setProfilingAnswers(local.profilingAnswers ?? [])
+        if (local.goal) setGoal(local.goal)
+        if (local.routines) setRoutines(local.routines)
+        if (local.activities) setActivities(local.activities)
+        setView((v) => (v === "intro" || v === "auth" ? local.view : v))
+        return
+      }
+
+      // New / unfinished member with no saved progress → start the welcome sector.
+      setView((v) => (v === "intro" || v === "auth" ? "welcome" : v))
     }
 
     supabase.auth.getSession().then(async ({ data }) => {
       if (data.session) {
         setUserEmail(data.session.user.email ?? "")
-        await resume()
+        recordLoginDay() // count today toward this month's login-day progress
+        // A shared invite link → jump straight to the Join screen.
+        if (pendingCode) setView("join")
+        else await resume()
       }
       if (!cancelled) setBooting(false)
     })
@@ -135,7 +205,9 @@ export default function App() {
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_IN" && session) {
         setUserEmail(session.user.email ?? "")
-        resume()
+        recordLoginDay()
+        if (pendingCode) setView("join")
+        else resume()
       } else if (event === "SIGNED_OUT") setView("intro")
     })
 
@@ -144,6 +216,44 @@ export default function App() {
       sub.subscription.unsubscribe()
     }
   }, [])
+
+  // Strip the invite code from the URL once captured, so a refresh is clean and
+  // never re-triggers the join routing.
+  useEffect(() => {
+    if (!pendingCode) return
+    try {
+      const url = new URL(window.location.href)
+      url.searchParams.delete("code")
+      url.searchParams.delete("join")
+      window.history.replaceState({}, "", url.pathname + url.search + url.hash)
+    } catch {
+      /* ignore */
+    }
+  }, [pendingCode])
+
+  // Mirror onboarding progress to localStorage so an accidental refresh resumes
+  // on the same screen. Only post-auth onboarding views are persisted.
+  useEffect(() => {
+    if (booting || !isResumableView(view)) return
+    saveProgress({
+      view,
+      welcomeAnswers,
+      profilingAnswers,
+      goal,
+      routines,
+      activities,
+      stage: profile?.stage,
+    })
+  }, [
+    booting,
+    view,
+    welcomeAnswers,
+    profilingAnswers,
+    goal,
+    routines,
+    activities,
+    profile?.stage,
+  ])
 
   // Splash while the session check runs, so a signed-in user never sees a flash
   // of the intro before landing on the hub.
@@ -214,14 +324,88 @@ export default function App() {
         }}
         onUpdateGoal={setGoal}
         onUpdateRoutines={setRoutines}
+        onDeleteAccount={deleteAccount}
         onSignOut={() => {
           supabase.auth.signOut()
+          clearProgress()
+          clearWelcomeProgress()
+          clearStageIntroProgress()
+          clearChatProgress()
           setProfile(undefined)
           setGoal(undefined)
           setRoutines([])
           setActivities([])
           setProfilingAnswers([])
+          setWelcomeAnswers([])
           setView("intro")
+        }}
+      />
+    )
+  }
+
+  // Intro + Auth are full-viewport web layouts (split-screen on desktop), so
+  // they render outside the mobile-width column used by the onboarding flow.
+  if (view === "intro") {
+    return (
+      <Intro
+        onComplete={() => {
+          setAuthMode("signup") // "Start with Tutur" → sign-up form
+          setView("auth")
+        }}
+        onSkip={() => {
+          setAuthMode("login") // "Sign In" → log-in form
+          setView("auth")
+        }}
+      />
+    )
+  }
+  if (view === "auth") {
+    return (
+      <Auth initialMode={authMode} onBack={() => setView("intro")} />
+    )
+  }
+  // Founding welcome is a full-viewport, responsive layout (not the mobile column).
+  if (view === "welcome") {
+    return (
+      <Welcome
+        onComplete={(a) => {
+          setWelcomeAnswers(a)
+          setView("stageIntro")
+        }}
+        onJoinCode={() => setView("join")}
+      />
+    )
+  }
+  // Co-parent joins a shared child with an invite code, then reloads onto the hub.
+  if (view === "join") {
+    return (
+      <JoinChild
+        initialCode={pendingCode ?? undefined}
+        onBack={() => setView("welcome")}
+        onJoined={() => {
+          clearWelcomeProgress()
+          clearProgress()
+          clearStageIntroProgress()
+          clearChatProgress()
+          window.location.reload()
+        }}
+      />
+    )
+  }
+  // Communication-stage education + fork (also a full-viewport layout).
+  if (view === "stageIntro") {
+    return (
+      <StageIntro
+        onTakeQuestions={() => setView("chat")}
+        onPickStage={(stage) => {
+          // Manual pick: set the stage and jump straight to the dashboard.
+          const finalProfile: Profile = {
+            ...profileFromAnswers(welcomeAnswers, userEmail),
+            stage,
+          }
+          setProfile(finalProfile)
+          void saveProfile(finalProfile)
+          setView("hub")
         }}
       />
     )
@@ -229,21 +413,10 @@ export default function App() {
 
   return (
     <div className="relative mx-auto flex min-h-full w-full max-w-md flex-col overflow-hidden">
-      {view === "intro" && (
-        <Intro
-          onComplete={() => setView("auth")}
-          onSkip={() => setView("auth")}
-        />
-      )}
-
-      {view === "auth" && <Auth />}
-
-      {view === "story" && (
-        <OnboardingStory onComplete={() => setView("chat")} />
-      )}
-
       {view === "chat" && (
         <Chat
+          startAnswers={welcomeAnswers}
+          persistKey="tutur.chat.v1"
           onComplete={(answers) => {
             setProfilingAnswers(answers)
             // Capture the child/guardian details from the answers right away.

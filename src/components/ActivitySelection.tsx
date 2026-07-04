@@ -8,6 +8,7 @@ import {
   STAGE_INFO,
   type StageCode,
 } from "@/lib/activities"
+import { useLang, pick } from "@/lib/i18n"
 
 /* ========================================================================== *
  *  ActivitySelection — Part 3.7: Intervention Activity Selection Matrix
@@ -26,8 +27,45 @@ import {
  *  with no pathway for the child's stage are hidden entirely.
  * ========================================================================== */
 
-const CORAL = "12 100% 64%" // active multi-selection indicator
-const TEAL = "172 66% 50%" // routine / metadata badges
+const CORAL = "259 80% 55%" // active multi-selection indicator
+const TEAL = "180 68% 34%" // routine / metadata badges
+
+/* ---- Co-located screen-chrome strings (Bahasa Malaysia default + English) --- */
+const STR = {
+  ms: {
+    back: "Kembali",
+    step: "Langkah 3 / 3",
+    heading: "Pilih Aktiviti Intervensi",
+    introPrefix: "Aktiviti ini dipadankan dengan tahap komunikasi anak anda — ",
+    stageLabel: (stageNum: string, stageName: string) =>
+      `Tahap ${stageNum} · ${stageName}`,
+    introSuffix: (cap: number) =>
+      `. Pilih aktiviti yang ingin disuntik oleh Maya ke dalam rutin harian anda. Pilih sekurang-kurangnya 1, sehingga ${cap} aktiviti.`,
+    materialsLabel: "Perlu disediakan",
+    emptyState:
+      "Belum ada aktiviti yang sepadan dengan tahap komunikasi anak anda. Aktiviti baharu akan ditambah tidak lama lagi.",
+    counter: (count: number, cap: number) => `${count} / ${cap} aktiviti dipilih`,
+    counterEmpty: "Pilih sekurang-kurangnya 1 aktiviti untuk diteruskan",
+    confirm: "Sahkan Aktiviti & Jalankan Tutur",
+  },
+  en: {
+    back: "Back",
+    step: "Step 3 / 3",
+    heading: "Choose Intervention Activities",
+    introPrefix: "These activities are matched to your child's communication stage — ",
+    stageLabel: (stageNum: string, stageName: string) =>
+      `Stage ${stageNum} · ${stageName}`,
+    introSuffix: (cap: number) =>
+      `. Pick the activities you'd like Maya to weave into your daily routine. Choose at least 1, up to ${cap} activities.`,
+    materialsLabel: "What to prepare",
+    emptyState:
+      "There aren't any activities matched to your child's communication stage yet. New activities are coming soon.",
+    counter: (count: number, cap: number) =>
+      `${count} / ${cap} activities selected`,
+    counterEmpty: "Choose at least 1 activity to continue",
+    confirm: "Confirm Activities & Start Tutur",
+  },
+} as const
 
 /** Hard ceiling on selections — 90 core activities of the 100-activity target. */
 const MAX_SELECT = 90
@@ -50,6 +88,9 @@ export default function ActivitySelection({
   /** Returns to the previous (routine selection) step. */
   onBack: () => void
 }) {
+  const { lang } = useLang()
+  const s = STR[lang]
+
   const stageCode = toStageCode(childStage)
   const stageInfo = STAGE_INFO[stageCode]
   const stageNum = stageCode.slice(1) // "1"–"5"
@@ -92,10 +133,10 @@ export default function ActivitySelection({
               className="flex items-center gap-1.5 rounded-full glass px-3.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
-              Kembali
+              {s.back}
             </button>
             <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Langkah 3 / 3
+              {s.step}
             </span>
           </div>
 
@@ -104,19 +145,15 @@ export default function ActivitySelection({
             className="animate-fade-up text-center md:text-left"
             style={{ animationFillMode: "both" }}
           >
-            <h1
-              className="text-balance text-2xl font-bold tracking-tight md:text-3xl"
-              style={{ textShadow: `0 0 26px hsl(${TEAL} / 0.45)` }}
-            >
-              Pilih Aktiviti Intervensi <span aria-hidden>🎯</span>
+            <h1 className="text-balance text-2xl font-bold tracking-tight md:text-3xl">
+              {s.heading} <span aria-hidden>🎯</span>
             </h1>
             <p className="mx-auto mt-3 max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground md:mx-0">
-              Aktiviti ini dipadankan dengan tahap komunikasi anak anda —{" "}
+              {s.introPrefix}
               <span className="font-semibold text-foreground">
-                Tahap {stageNum} · {stageInfo.name}
+                {s.stageLabel(stageNum, pick(stageInfo.name, lang))}
               </span>
-              . Pilih aktiviti yang ingin disuntik oleh Maya ke dalam rutin harian
-              anda. Pilih sekurang-kurangnya 1, sehingga {cap} aktiviti.
+              {s.introSuffix(cap)}
             </p>
           </header>
 
@@ -138,8 +175,8 @@ export default function ActivitySelection({
                       disabled && "cursor-not-allowed opacity-40",
                       !disabled && "hover:scale-[1.02]",
                       isSelected
-                        ? "bg-white/[0.07]"
-                        : "border-white/10 bg-white/[0.04] hover:border-white/20 hover:shadow-[0_0_32px_-10px_hsl(12_100%_64%/0.4)]"
+                        ? "bg-[hsl(259_80%_55%/0.10)]"
+                        : "border-foreground/10 bg-card hover:bg-foreground/5 hover:shadow-[0_0_32px_-10px_hsl(259_80%_55%/0.4)]"
                     )}
                     style={{
                       animationDelay: `${i * 50}ms`,
@@ -157,7 +194,7 @@ export default function ActivitySelection({
                       <span
                         className={cn(
                           "flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border transition-all duration-200",
-                          isSelected ? "border-transparent" : "border-white/25"
+                          isSelected ? "border-transparent" : "border-foreground/25"
                         )}
                         style={isSelected ? { background: `hsl(${CORAL})` } : undefined}
                         aria-hidden
@@ -168,7 +205,7 @@ export default function ActivitySelection({
                       </span>
 
                       <h3 className="flex-1 pt-0.5 text-base font-semibold leading-snug text-foreground">
-                        {activity.title}
+                        {pick(activity.title, lang)}
                       </h3>
                     </div>
 
@@ -181,21 +218,23 @@ export default function ActivitySelection({
                           color: `hsl(${TEAL})`,
                         }}
                       >
-                        {ROUTINE_LABELS[activity.routine] ?? activity.routine}
+                        {ROUTINE_LABELS[activity.routine]
+                          ? pick(ROUTINE_LABELS[activity.routine], lang)
+                          : activity.routine}
                       </span>
                     </div>
 
                     {/* Perlu disediakan — things to prepare for this activity */}
-                    {activity.materials.length > 0 && (
+                    {pick(activity.materials, lang).length > 0 && (
                       <div className="mt-3">
                         <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                          Perlu disediakan
+                          {s.materialsLabel}
                         </p>
                         <div className="flex flex-wrap gap-1.5">
-                          {activity.materials.map((m) => (
+                          {pick(activity.materials, lang).map((m) => (
                             <span
                               key={m}
-                              className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[11px] font-medium text-foreground/80"
+                              className="rounded-full bg-foreground/[0.06] px-2.5 py-1 text-[11px] font-medium text-foreground/80"
                             >
                               {m}
                             </span>
@@ -209,8 +248,7 @@ export default function ActivitySelection({
             </div>
           ) : (
             <p className="mt-12 text-center text-sm text-muted-foreground">
-              Belum ada aktiviti yang sepadan dengan tahap komunikasi anak anda.
-              Aktiviti baharu akan ditambah tidak lama lagi.
+              {s.emptyState}
             </p>
           )}
         </div>
@@ -220,9 +258,7 @@ export default function ActivitySelection({
       <footer className="shrink-0 border-t border-border/60 bg-background/80 px-6 pb-[max(env(safe-area-inset-bottom),1rem)] pt-4 backdrop-blur-xl md:px-8">
         <div className="mx-auto max-w-5xl">
           <p className="mb-2.5 text-center text-xs text-muted-foreground">
-            {canProceed
-              ? `${count} / ${cap} aktiviti dipilih`
-              : "Pilih sekurang-kurangnya 1 aktiviti untuk diteruskan"}
+            {canProceed ? s.counter(count, cap) : s.counterEmpty}
           </p>
           <Button
             size="lg"
@@ -237,7 +273,7 @@ export default function ActivitySelection({
             }}
           >
             <Sparkles className="transition-transform duration-300 group-hover:scale-110" />
-            Sahkan Aktiviti &amp; Jalankan Tutur
+            {s.confirm}
           </Button>
         </div>
       </footer>

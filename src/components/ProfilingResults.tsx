@@ -1,7 +1,40 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { useLang } from "@/lib/i18n"
+import { STAGES_BY_LANG } from "@/lib/stages"
 import { ArrowRight, Check, Radar, Sparkles } from "lucide-react"
+
+type Lang = "ms" | "en"
+
+/* -------------------------------------------------------------------------- */
+/*  Co-located string table                                                   */
+/* -------------------------------------------------------------------------- */
+
+const STR = {
+  ms: {
+    analysing: "Maya sedang menganalisis…",
+    childLevelHeading: "Tahap Komunikasi Anak Anda",
+    stageLabel: (n: number) => `Tahap ${n}`,
+    noteFromMaya: "Nota daripada Maya",
+    exploreEachStage: "Terokai Setiap Tahap",
+    swipeToSee: "Leret untuk lihat →",
+    yourChildsLevel: "Tahap Anak Anda",
+    viewStage: (n: number) => `Lihat Tahap ${n}`,
+    toDashboard: "Ke Papan Pemuka",
+  },
+  en: {
+    analysing: "Maya is analysing…",
+    childLevelHeading: "Your Child's Communication Level",
+    stageLabel: (n: number) => `Level ${n}`,
+    noteFromMaya: "A note from Maya",
+    exploreEachStage: "Explore Every Level",
+    swipeToSee: "Swipe to see →",
+    yourChildsLevel: "Your Child's Level",
+    viewStage: (n: number) => `View Level ${n}`,
+    toDashboard: "To Dashboard",
+  },
+} as const
 
 /* ========================================================================== *
  *  ProfilingResults
@@ -115,70 +148,46 @@ function computeResult(answers: string[]): ProfilingResult {
   return { stage: finalStage, reason, stageScores }
 }
 
-const OVERRIDE_MESSAGE: Record<Exclude<ResultReason, "normal">, string> = {
-  empty:
-    "Setiap anak bermula dari langkah pertama. Kami telah menyusun profil Tahap 1 khusus untuk merangsang komunikasi awal anak anda. Mari kita mulakan perjalanan ini bersama-sama!",
-  inconsistent:
-    "Kami dapati ada sedikit percanggahan pada jawapan anda. Untuk memastikan asas komunikasinya benar-benar kukuh, kami akan mulakan perjalanan Tutur dari fasa ini.",
-  ageCapped:
-    "Wah, nampaknya anak anda sangat aktif! Untuk memastikan asas komunikasinya benar-benar kukuh, kami akan mulakan perjalanan Tutur dari had maksimum umur mereka.",
+const OVERRIDE_MESSAGE: Record<
+  Lang,
+  Record<Exclude<ResultReason, "normal">, string>
+> = {
+  ms: {
+    empty:
+      "Setiap anak bermula dari langkah pertama. Kami telah menyusun profil Tahap 1 khusus untuk merangsang komunikasi awal anak anda. Mari kita mulakan perjalanan ini bersama-sama!",
+    inconsistent:
+      "Kami dapati ada sedikit percanggahan pada jawapan anda. Untuk memastikan asas komunikasinya benar-benar kukuh, kami akan mulakan perjalanan Tutur dari fasa ini.",
+    ageCapped:
+      "Wah, nampaknya anak anda sangat aktif! Untuk memastikan asas komunikasinya benar-benar kukuh, kami akan mulakan perjalanan Tutur dari had maksimum umur mereka.",
+  },
+  en: {
+    empty:
+      "Every child begins with a first step. We've prepared a Level 1 profile designed to nurture your child's earliest communication. Let's begin this journey together!",
+    inconsistent:
+      "We noticed a few small inconsistencies in your answers. To make sure the communication foundation is truly solid, we'll begin the Tutur journey from this phase.",
+    ageCapped:
+      "Wow, your child seems very active! To make sure the communication foundation is truly solid, we'll begin the Tutur journey from the highest level suitable for their age.",
+  },
 }
 
 /* -------------------------------------------------------------------------- */
 /*  Stage content (Educational Explorer)                                      */
+/*  Stage data (name / age / desc / hue) is shared with StageIntro — see      */
+/*  @/lib/stages.                                                             */
 /* -------------------------------------------------------------------------- */
 
-interface Stage {
-  level: number
-  name: string
-  age: string
-  desc: string
-  hue: number // base neon hue for this stage's glow
+const ANALYSIS_LOGS_BY_LANG: Record<Lang, string[]> = {
+  ms: [
+    "Menilai maklum balas...",
+    "Memetakan data perkembangan...",
+    "Menjana profil peribadi Maya...",
+  ],
+  en: [
+    "Evaluating responses...",
+    "Mapping developmental data...",
+    "Generating Maya's personal profile...",
+  ],
 }
-
-const STAGES: Stage[] = [
-  {
-    level: 1,
-    name: "Peneroka",
-    age: "6+ Bulan",
-    desc: "Anak mula memberi respons kepada bunyi dan ekspresi wajah. Walau bagaimanapun, mereka belum berkomunikasi secara sengaja atau mempunyai maksud tertentu.",
-    hue: 187,
-  },
-  {
-    level: 2,
-    name: "Isyarat",
-    age: "10+ Bulan",
-    desc: "Anak mula berkomunikasi menggunakan bahasa badan, isyarat tangan, bunyi, dan hubungan mata (eye gaze). Perkataan yang konsisten belum bermula lagi.",
-    hue: 210,
-  },
-  {
-    level: 3,
-    name: "Perkataan",
-    age: "1+ Tahun",
-    desc: "Anak sudah mula menggunakan perkataan tunggal dan gabungan awal dua perkataan. Mereka juga sudah pandai menamakan objek di sekeliling mereka.",
-    hue: 270,
-  },
-  {
-    level: 4,
-    name: "Ayat",
-    age: "3+ Tahun",
-    desc: 'Anak mampu membina ayat pendek yang mengandungi 3 hingga 4 perkataan. Mereka juga boleh menjawab soalan mudah seperti "apa", "di mana", dan "siapa".',
-    hue: 300,
-  },
-  {
-    level: 5,
-    name: "Cerita",
-    age: "5+ Tahun",
-    desc: "Anak boleh menggunakan ayat yang panjang dan kompleks, bercerita secara tersusun mengikut urutan, serta mampu meluahkan emosi dan perasaan mereka.",
-    hue: 330,
-  },
-]
-
-const ANALYSIS_LOGS = [
-  "Menilai maklum balas...",
-  "Memetakan data perkembangan...",
-  "Menjana profil peribadi Maya...",
-]
 
 const ANALYSIS_DURATION = 3000 // exactly 3 seconds, per spec
 const SWIPE_THRESHOLD = 48
@@ -188,6 +197,10 @@ const SWIPE_THRESHOLD = 48
 /* -------------------------------------------------------------------------- */
 
 function AnalysisScreen() {
+  const { lang } = useLang()
+  const s = STR[lang]
+  const ANALYSIS_LOGS = ANALYSIS_LOGS_BY_LANG[lang]
+
   // Reveal the log lines one after another across the 3s window.
   const [logStep, setLogStep] = useState(1)
 
@@ -197,7 +210,7 @@ function AnalysisScreen() {
       ANALYSIS_DURATION / ANALYSIS_LOGS.length
     )
     return () => clearInterval(id)
-  }, [])
+  }, [ANALYSIS_LOGS.length])
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center px-8 text-center">
@@ -213,7 +226,7 @@ function AnalysisScreen() {
           className="absolute inset-0 animate-[spin_1.8s_linear_infinite] rounded-full"
           style={{
             background:
-              "conic-gradient(from 0deg, transparent 0deg, hsl(187 100% 50% / 0.45) 60deg, transparent 120deg)",
+              "conic-gradient(from 0deg, transparent 0deg, hsl(259 80% 55% / 0.35) 60deg, transparent 120deg)",
           }}
         />
         {/* counter-rotating accent ring */}
@@ -226,7 +239,7 @@ function AnalysisScreen() {
 
       <div className="shimmer-overlay rounded-full px-2">
         <h2 className="bg-gradient-to-r from-primary via-secondary to-primary bg-clip-text text-xl font-bold tracking-tight text-transparent">
-          Maya sedang menganalisis…
+          {s.analysing}
         </h2>
       </div>
 
@@ -267,11 +280,15 @@ export default function ProfilingResults({
   answers: string[]
   onComplete: (stage: number) => void
 }) {
+  const { lang } = useLang()
+  const s = STR[lang]
+  const STAGES = STAGES_BY_LANG[lang]
+
   // Engine runs once; the reveal is gated behind the 3s animation.
   const result = useMemo(() => computeResult(answers), [answers])
   const resultStage = STAGES[result.stage - 1]
   const message =
-    result.reason === "normal" ? null : OVERRIDE_MESSAGE[result.reason]
+    result.reason === "normal" ? null : OVERRIDE_MESSAGE[lang][result.reason]
 
   const [revealed, setRevealed] = useState(false)
   useEffect(() => {
@@ -309,45 +326,45 @@ export default function ProfilingResults({
         className="animate-fade-up text-center"
         style={{ animationFillMode: "both" }}
       >
-        <p className="text-sm font-medium uppercase tracking-[0.2em] text-muted-foreground">
-          Tahap Komunikasi Anak Anda
+        <p className="font-display text-sm font-medium uppercase tracking-[0.2em] text-muted-foreground">
+          {s.childLevelHeading}
         </p>
 
         {/* Level badge with neon backdrop glow */}
         <div className="relative mx-auto mt-6 w-fit">
           <div
             className="absolute -inset-6 rounded-full blur-2xl"
-            style={{ background: `hsl(${hue} 100% 55% / 0.28)` }}
+            style={{ background: `hsl(${hue} 70% 55% / 0.14)` }}
             aria-hidden
           />
           <div
             className="relative flex flex-col items-center gap-2 rounded-3xl glass-strong px-8 py-6"
             style={{
-              boxShadow: `0 0 50px -12px hsl(${hue} 100% 55% / 0.6)`,
-              borderColor: `hsl(${hue} 100% 60% / 0.35)`,
+              boxShadow: `0 0 50px -18px hsl(${hue} 70% 55% / 0.3)`,
+              borderColor: `hsl(${hue} 60% 55% / 0.25)`,
             }}
           >
             <span
               className="flex h-14 w-14 items-center justify-center rounded-2xl text-2xl font-extrabold"
               style={{
-                background: `hsl(${hue} 100% 55% / 0.15)`,
-                color: `hsl(${hue} 100% 75%)`,
-                boxShadow: `inset 0 0 20px -6px hsl(${hue} 100% 60% / 0.7)`,
+                background: `hsl(${hue} 70% 55% / 0.15)`,
+                color: `hsl(${hue} 60% 40%)`,
+                boxShadow: `inset 0 0 20px -6px hsl(${hue} 70% 55% / 0.35)`,
               }}
             >
               {result.stage}
             </span>
             <h1 className="text-2xl font-bold tracking-tight">
-              Tahap {result.stage} —{" "}
-              <span style={{ color: `hsl(${hue} 100% 78%)` }}>
+              {s.stageLabel(result.stage)} —{" "}
+              <span style={{ color: `hsl(${hue} 60% 42%)` }}>
                 {resultStage.name}
               </span>
             </h1>
             <span
               className="rounded-full px-3 py-1 text-xs font-semibold"
               style={{
-                background: `hsl(${hue} 100% 55% / 0.15)`,
-                color: `hsl(${hue} 100% 82%)`,
+                background: `hsl(${hue} 70% 55% / 0.15)`,
+                color: `hsl(${hue} 60% 40%)`,
               }}
             >
               {resultStage.age}
@@ -359,11 +376,11 @@ export default function ProfilingResults({
         {message && (
           <div
             className="mx-auto mt-6 max-w-md animate-fade-in rounded-2xl glass border-l-2 p-4 text-left"
-            style={{ borderLeftColor: `hsl(${hue} 100% 60% / 0.7)` }}
+            style={{ borderLeftColor: `hsl(${hue} 60% 50% / 0.6)` }}
           >
             <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-primary">
               <Sparkles className="h-3.5 w-3.5" />
-              Nota daripada Maya
+              {s.noteFromMaya}
             </div>
             <p className="text-sm leading-relaxed text-foreground/85">
               {message}
@@ -376,10 +393,10 @@ export default function ProfilingResults({
       <section className="mt-9 flex-1">
         <div className="mb-3 flex items-center justify-between px-1">
           <h2 className="text-sm font-semibold tracking-tight text-foreground/90">
-            Terokai Setiap Tahap
+            {s.exploreEachStage}
           </h2>
           <span className="text-xs text-muted-foreground">
-            Leret untuk lihat →
+            {s.swipeToSee}
           </span>
         </div>
 
@@ -406,9 +423,9 @@ export default function ProfilingResults({
                     style={
                       isChildLevel
                         ? {
-                            boxShadow: `0 0 44px -14px hsl(${s.hue} 100% 55% / 0.65)`,
+                            boxShadow: `0 0 44px -18px hsl(${s.hue} 70% 55% / 0.4)`,
                             // ring colour via outline-ish border
-                            borderColor: `hsl(${s.hue} 100% 60% / 0.4)`,
+                            borderColor: `hsl(${s.hue} 60% 55% / 0.35)`,
                           }
                         : undefined
                     }
@@ -417,8 +434,8 @@ export default function ProfilingResults({
                       <span
                         className="flex h-11 w-11 items-center justify-center rounded-2xl text-lg font-bold"
                         style={{
-                          background: `hsl(${s.hue} 100% 55% / 0.15)`,
-                          color: `hsl(${s.hue} 100% 76%)`,
+                          background: `hsl(${s.hue} 70% 55% / 0.15)`,
+                          color: `hsl(${s.hue} 60% 40%)`,
                         }}
                       >
                         {s.level}
@@ -427,18 +444,18 @@ export default function ProfilingResults({
                         <span
                           className="flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold"
                           style={{
-                            background: `hsl(${s.hue} 100% 55% / 0.18)`,
-                            color: `hsl(${s.hue} 100% 80%)`,
+                            background: `hsl(${s.hue} 70% 55% / 0.16)`,
+                            color: `hsl(${s.hue} 60% 40%)`,
                           }}
                         >
                           <Sparkles className="h-3 w-3" />
-                          Tahap Anak Anda
+                          {STR[lang].yourChildsLevel}
                         </span>
                       )}
                     </div>
 
                     <h3 className="text-lg font-bold tracking-tight">
-                      Tahap {s.level} — {s.name}
+                      {STR[lang].stageLabel(s.level)} — {s.name}
                     </h3>
                     <p className="mt-0.5 text-xs font-medium text-muted-foreground">
                       {s.age}
@@ -463,7 +480,7 @@ export default function ProfilingResults({
                 key={s.level}
                 type="button"
                 onClick={() => goTo(i)}
-                aria-label={`Lihat Tahap ${s.level}`}
+                aria-label={STR[lang].viewStage(s.level)}
                 aria-current={active}
                 className={cn(
                   "h-2 rounded-full transition-all duration-500",
@@ -472,10 +489,10 @@ export default function ProfilingResults({
                 )}
                 style={{
                   background: active
-                    ? `hsl(${s.hue} 100% 60%)`
-                    : "hsl(0 0% 100% / 0.2)",
+                    ? `hsl(${s.hue} 60% 52%)`
+                    : "hsl(var(--foreground) / 0.15)",
                   boxShadow: active
-                    ? `0 0 12px hsl(${s.hue} 100% 60% / 0.7)`
+                    ? `0 0 12px hsl(${s.hue} 60% 52% / 0.45)`
                     : undefined,
                 }}
               />
@@ -491,7 +508,7 @@ export default function ProfilingResults({
           onClick={() => onComplete(result.stage)}
           className="shimmer-overlay group w-full animate-pulse-glow rounded-2xl text-base font-semibold"
         >
-          Ke Papan Pemuka
+          {s.toDashboard}
           <ArrowRight className="transition-transform duration-300 group-hover:translate-x-1" />
         </Button>
       </div>

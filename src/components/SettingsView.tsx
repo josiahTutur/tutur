@@ -1,6 +1,14 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
+import {
+  createChildInvite,
+  acceptChildInvite,
+  loadActiveInvite,
+  loadCoGuardians,
+  type CoGuardian,
+} from "@/lib/db"
+import { useLang, useT, pick } from "@/lib/i18n"
 import {
   ROUTINE_LABELS,
   STAGE_INFO,
@@ -18,13 +26,19 @@ import {
   Bell,
   Check,
   Clock,
+  Copy,
   Globe,
   Lock,
+  Moon,
+  Share2,
   Sparkles,
+  Sun,
   Target,
+  Users,
   Volume2,
   X,
 } from "lucide-react"
+import { useTheme } from "@/lib/theme"
 
 /** Ordered routine list (R1–R10) shared with the onboarding routine picker. */
 const ROUTINE_ENTRIES = Object.entries(ROUTINE_LABELS)
@@ -52,11 +66,29 @@ const MS_MONTHS = [
   "Disember",
 ]
 
-function formatMalayDate(iso?: string): string {
-  if (!iso) return "Tidak diketahui"
+/** English month names — for the "profiled on" date label. */
+const EN_MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+]
+
+function formatProfiledDate(iso: string | undefined, lang: "ms" | "en"): string {
+  const s = STR[lang]
+  if (!iso) return s.dateUnknown
   const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return "Tidak diketahui"
-  return `${d.getDate()} ${MS_MONTHS[d.getMonth()]} ${d.getFullYear()}`
+  if (Number.isNaN(d.getTime())) return s.dateUnknown
+  const months = lang === "en" ? EN_MONTHS : MS_MONTHS
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`
 }
 
 /* ========================================================================== *
@@ -70,10 +102,194 @@ function formatMalayDate(iso?: string): string {
  *  Notification & language prefs are UI-only until a backend persists them.
  * ========================================================================== */
 
-const CORAL = "12 100% 64%"
-const TEAL = "172 66% 50%"
-const PURPLE = "270 95% 65%"
-const PURPLE_TEXT = "270 95% 84%"
+const CORAL = "259 80% 55%"
+const TEAL = "180 68% 34%"
+const PURPLE = "259 80% 55%"
+const PURPLE_TEXT = "258 55% 42%"
+
+/** Co-located UI strings for the Settings screen (chrome not covered by i18n). */
+const STR = {
+  ms: {
+    // Communication stage section
+    stageTitle: "Tahap Komunikasi",
+    stageDesc:
+      "Tahap ini menentukan aktiviti yang disyorkan untuk anak anda. Maya menetapkannya secara automatik berdasarkan profil semasa pendaftaran.",
+    profiledOn: "Diprofil pada",
+    dateUnknown: "Tidak diketahui",
+    stageLabel: "Tahap",
+    change: "Tukar",
+    // Developmental goals section
+    goalsTitle: "Matlamat Perkembangan",
+    goalsDesc:
+      "Matlamat aktif menjadi tumpuan Maya. Matlamat lain akan dibuka tidak lama lagi.",
+    active: "Aktif",
+    comingSoon: "Akan datang",
+    // Daily routines section
+    routinesTitle: "Rutin Harian",
+    routinesDesc:
+      "Rutin harian tempat Maya menyuntik aktiviti intervensi. Anda boleh ubah pilihan ini pada bila-bila masa.",
+    routinesSelected: "rutin dipilih",
+    noRoutinesSelected: "Tiada rutin dipilih",
+    // Notifications section
+    notificationsTitle: "Pemberitahuan",
+    dailyReminderLabel: "Peringatan aktiviti harian",
+    dailyReminderDesc: "Ingatkan saya untuk lengkapkan aktiviti hari ini.",
+    reminderTimeLabel: "Masa peringatan",
+    weeklySummaryLabel: "Ringkasan kemajuan mingguan",
+    weeklySummaryDesc: "Hantar rumusan perkembangan anak setiap minggu.",
+    // AI voice section
+    voiceTitle: "Suara AI",
+    voiceDesc:
+      "Pilih suara yang membaca perkataan di Papan AAC aktiviti harian. Ketik untuk dengar contoh.",
+    // Password section
+    passwordTitle: "Kata Laluan",
+    passwordDesc:
+      "Tetapkan kata laluan untuk log masuk dengan lebih cepat, tanpa perlu menunggu pautan e-mel.",
+    passwordPlaceholder: "Kata laluan baharu (sekurang-kurangnya 6 aksara)",
+    passwordSaving: "Menyimpan…",
+    passwordSet: "Tetapkan Kata Laluan",
+    pwTooShort: "Kata laluan mesti sekurang-kurangnya 6 aksara.",
+    pwFailed: "Gagal menetapkan kata laluan. Sila cuba lagi.",
+    pwSuccess: "Kata laluan berjaya ditetapkan! 🎉",
+    // Share with partner (co-parent)
+    shareTitle: "Kongsi dengan Pasangan",
+    shareDesc:
+      "Jemput pasangan anda untuk menjaga anak yang sama. Kemajuan dikongsi bersama — sesiapa sahaja boleh melakukan aktiviti.",
+    sharedWith: "Dikongsi dengan",
+    roleOwner: "Pemilik",
+    roleParent: "Pasangan",
+    generateCode: "Jana Kod Jemputan",
+    generating: "Menjana…",
+    codeHint: "Kongsikan kod ini dengan pasangan anda. Sah selama 14 hari.",
+    copy: "Salin",
+    copied: "Disalin!",
+    shareLink: "Kongsi Pautan",
+    linkCopied: "Pautan disalin!",
+    shareText: "Sertai saya di Tutur untuk membantu komunikasi anak kita.",
+    joinTitle: "Ada kod jemputan?",
+    joinPlaceholder: "Masukkan kod jemputan",
+    joinBtn: "Sertai",
+    joining: "Menyertai…",
+    joinSuccess: "Berjaya! Memuatkan semula…",
+    joinError: "Kod tidak sah atau telah tamat tempoh.",
+    // Shared dialog chrome
+    close: "Tutup",
+    current: "Semasa",
+    no: "Tidak",
+    // Stage-change dialog
+    stageDialogAria: "Tukar tahap komunikasi",
+    stageDialogTitle: "Tukar Tahap Komunikasi",
+    stageDialogDesc: "Pilih tahap baharu untuk anak anda, kemudian sahkan.",
+    stageConfirmPrefix: "Tukar tahap anak anda ke",
+    stageConfirmEmpty: "Pilih tahap yang berbeza untuk menukar.",
+    confirmChange: "Ya, Tukar",
+    // Goal-change dialog
+    goalDialogAria: "Tukar matlamat utama",
+    goalDialogTitle: "Tukar Matlamat Utama",
+    goalDialogDesc: "Pilih matlamat baharu untuk anak anda, kemudian sahkan.",
+    goalConfirmPrefix: "Tukar matlamat utama anak anda ke",
+    goalConfirmEmpty: "Pilih matlamat yang berbeza untuk menukar.",
+    // Routine-change dialog
+    routineDialogAria: "Tukar rutin harian",
+    routineDialogTitle: "Tukar Rutin Harian",
+    routineDialogDesc: "Pilih rutin harian anda, kemudian sahkan.",
+    routineConfirmEmpty: "Pilih sekurang-kurangnya 1 rutin.",
+    routineNoChange: "Tiada perubahan dibuat.",
+    routineConfirmPrefix: "Simpan",
+    routineConfirmSuffix: "rutin harian anda?",
+    confirmSave: "Ya, Simpan",
+  },
+  en: {
+    // Communication stage section
+    stageTitle: "Communication Stage",
+    stageDesc:
+      "This stage decides which activities are recommended for your child. Maya sets it automatically based on the profile from sign-up.",
+    profiledOn: "Profiled on",
+    dateUnknown: "Unknown",
+    stageLabel: "Stage",
+    change: "Change",
+    // Developmental goals section
+    goalsTitle: "Developmental Goals",
+    goalsDesc:
+      "The active goal is where Maya focuses. The other goals will open up soon.",
+    active: "Active",
+    comingSoon: "Coming soon",
+    // Daily routines section
+    routinesTitle: "Daily Routines",
+    routinesDesc:
+      "The daily routines where Maya weaves in intervention activities. You can change these anytime.",
+    routinesSelected: "routines selected",
+    noRoutinesSelected: "No routines selected",
+    // Notifications section
+    notificationsTitle: "Notifications",
+    dailyReminderLabel: "Daily activity reminder",
+    dailyReminderDesc: "Remind me to finish today's activities.",
+    reminderTimeLabel: "Reminder time",
+    weeklySummaryLabel: "Weekly progress summary",
+    weeklySummaryDesc: "Send a summary of your child's progress every week.",
+    // AI voice section
+    voiceTitle: "AI Voice",
+    voiceDesc:
+      "Choose the voice that reads the words on the daily-activity AAC Board. Tap to hear a sample.",
+    // Password section
+    passwordTitle: "Password",
+    passwordDesc:
+      "Set a password to log in faster, without waiting for an email link.",
+    passwordPlaceholder: "New password (at least 6 characters)",
+    passwordSaving: "Saving…",
+    passwordSet: "Set Password",
+    pwTooShort: "Password must be at least 6 characters.",
+    pwFailed: "Couldn't set the password. Please try again.",
+    pwSuccess: "Password set successfully! 🎉",
+    // Share with partner (co-parent)
+    shareTitle: "Share with Partner",
+    shareDesc:
+      "Invite your partner to care for the same child. Progress is shared — either of you can do the activities.",
+    sharedWith: "Shared with",
+    roleOwner: "Owner",
+    roleParent: "Partner",
+    generateCode: "Generate Invite Code",
+    generating: "Generating…",
+    codeHint: "Share this code with your partner. Valid for 14 days.",
+    copy: "Copy",
+    copied: "Copied!",
+    shareLink: "Share Link",
+    linkCopied: "Link copied!",
+    shareText: "Join me on Tutur to support our child's communication.",
+    joinTitle: "Have an invite code?",
+    joinPlaceholder: "Enter invite code",
+    joinBtn: "Join",
+    joining: "Joining…",
+    joinSuccess: "Success! Reloading…",
+    joinError: "Invalid or expired code.",
+    // Shared dialog chrome
+    close: "Close",
+    current: "Current",
+    no: "No",
+    // Stage-change dialog
+    stageDialogAria: "Change communication stage",
+    stageDialogTitle: "Change Communication Stage",
+    stageDialogDesc: "Pick a new stage for your child, then confirm.",
+    stageConfirmPrefix: "Change your child's stage to",
+    stageConfirmEmpty: "Pick a different stage to make a change.",
+    confirmChange: "Yes, Change",
+    // Goal-change dialog
+    goalDialogAria: "Change primary goal",
+    goalDialogTitle: "Change Primary Goal",
+    goalDialogDesc: "Pick a new goal for your child, then confirm.",
+    goalConfirmPrefix: "Change your child's primary goal to",
+    goalConfirmEmpty: "Pick a different goal to make a change.",
+    // Routine-change dialog
+    routineDialogAria: "Change daily routines",
+    routineDialogTitle: "Change Daily Routines",
+    routineDialogDesc: "Pick your daily routines, then confirm.",
+    routineConfirmEmpty: "Pick at least 1 routine.",
+    routineNoChange: "No changes made.",
+    routineConfirmPrefix: "Save",
+    routineConfirmSuffix: "of your daily routines?",
+    confirmSave: "Yes, Save",
+  },
+} as const
 
 export default function SettingsView({
   stage = 1,
@@ -99,11 +315,15 @@ export default function SettingsView({
   /** Persists a daily-routine change. */
   onRoutinesChange: (routines: string[]) => void
 }) {
-  // Notification & language preferences — local until wired to a backend.
+  // Notification preferences — local until wired to a backend.
   const [dailyReminder, setDailyReminder] = useState(true)
   const [reminderTime, setReminderTime] = useState("18:00")
   const [weeklySummary, setWeeklySummary] = useState(true)
-  const [language, setLanguage] = useState<"ms" | "en">("ms")
+  // Language is a global, persisted preference.
+  const { lang: language, setLang: setLanguage } = useLang()
+  const { theme, setTheme } = useTheme()
+  const t = useT()
+  const s = STR[language]
 
   // Set / change account password (so magic-link accounts can use a password).
   const [newPassword, setNewPassword] = useState("")
@@ -111,7 +331,7 @@ export default function SettingsView({
   const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null)
   async function handleSetPassword() {
     if (newPassword.length < 6) {
-      setPwMsg({ ok: false, text: "Kata laluan mesti sekurang-kurangnya 6 aksara." })
+      setPwMsg({ ok: false, text: s.pwTooShort })
       return
     }
     setPwLoading(true)
@@ -119,11 +339,95 @@ export default function SettingsView({
     const { error } = await supabase.auth.updateUser({ password: newPassword })
     setPwLoading(false)
     if (error) {
-      setPwMsg({ ok: false, text: "Gagal menetapkan kata laluan. Sila cuba lagi." })
+      setPwMsg({ ok: false, text: s.pwFailed })
       return
     }
     setNewPassword("")
-    setPwMsg({ ok: true, text: "Kata laluan berjaya ditetapkan! 🎉" })
+    setPwMsg({ ok: true, text: s.pwSuccess })
+  }
+
+  // Share with partner — invite code + co-guardian list.
+  const [coGuardians, setCoGuardians] = useState<CoGuardian[]>([])
+  const [inviteCode, setInviteCode] = useState<string | null>(null)
+  const [genLoading, setGenLoading] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [linkCopied, setLinkCopied] = useState(false)
+  const [joinInput, setJoinInput] = useState("")
+  const [joinLoading, setJoinLoading] = useState(false)
+  const [joinMsg, setJoinMsg] = useState<{ ok: boolean; text: string } | null>(
+    null
+  )
+
+  const inviteLink = inviteCode
+    ? `${window.location.origin}/?code=${inviteCode}`
+    : null
+
+  useEffect(() => {
+    loadCoGuardians().then(setCoGuardians)
+    // Re-show an existing valid code instead of forcing a new one each visit.
+    loadActiveInvite().then((code) => {
+      if (code) setInviteCode(code)
+    })
+  }, [])
+
+  async function handleGenerateInvite() {
+    setGenLoading(true)
+    setCopied(false)
+    const code = await createChildInvite()
+    setGenLoading(false)
+    if (code) setInviteCode(code)
+  }
+  function handleCopyInvite() {
+    if (!inviteCode) return
+    navigator.clipboard
+      ?.writeText(inviteCode)
+      .then(() => {
+        setCopied(true)
+        window.setTimeout(() => setCopied(false), 1500)
+      })
+      .catch(() => {})
+  }
+  // Share the full join link — native share sheet on mobile, copy elsewhere.
+  async function handleShareInvite() {
+    if (!inviteLink) return
+    const shareFn = (
+      navigator as Navigator & {
+        share?: (d: { title?: string; text?: string; url?: string }) => Promise<void>
+      }
+    ).share
+    if (shareFn) {
+      try {
+        await shareFn.call(navigator, {
+          title: "Tutur",
+          text: s.shareText,
+          url: inviteLink,
+        })
+      } catch {
+        /* user cancelled — ignore */
+      }
+      return
+    }
+    try {
+      await navigator.clipboard?.writeText(inviteLink)
+      setLinkCopied(true)
+      window.setTimeout(() => setLinkCopied(false), 1500)
+    } catch {
+      /* ignore */
+    }
+  }
+  async function handleJoin() {
+    const code = joinInput.trim()
+    if (!code || joinLoading) return
+    setJoinLoading(true)
+    setJoinMsg(null)
+    const res = await acceptChildInvite(code)
+    if (res.ok) {
+      setJoinMsg({ ok: true, text: s.joinSuccess })
+      window.setTimeout(() => window.location.reload(), 900)
+    } else {
+      setJoinLoading(false)
+      setJoinMsg({ ok: false, text: s.joinError })
+    }
   }
 
   // AAC voice (persisted) — pick female/male and hear a sample on select.
@@ -196,17 +500,16 @@ export default function SettingsView({
     <div className="h-full overflow-y-auto px-4 pb-28 pt-5 md:px-8 md:pt-6">
       <div className="mx-auto max-w-2xl space-y-6">
         {/* Communication stage — read-only summary, changed via a confirmed dialog */}
-        <Section icon={Sparkles} title="Tahap Komunikasi">
+        <Section icon={Sparkles} title={s.stageTitle}>
           <p className="text-xs leading-relaxed text-muted-foreground">
-            Tahap ini menentukan aktiviti yang disyorkan untuk anak anda. Maya
-            menetapkannya secara automatik berdasarkan profil semasa pendaftaran.
+            {s.stageDesc}
           </p>
 
           {/* Profiled-on date */}
-          <div className="flex items-center justify-between gap-3 rounded-2xl bg-white/[0.03] px-4 py-3">
-            <span className="text-sm text-muted-foreground">Diprofil pada</span>
+          <div className="flex items-center justify-between gap-3 rounded-2xl bg-[hsl(259_80%_55%/0.10)] px-4 py-3">
+            <span className="text-sm text-muted-foreground">{s.profiledOn}</span>
             <span className="text-sm font-semibold text-foreground">
-              {formatMalayDate(profiledAt)}
+              {formatProfiledDate(profiledAt, language)}
             </span>
           </div>
 
@@ -216,7 +519,7 @@ export default function SettingsView({
             style={{
               borderColor: `hsl(${CORAL} / 0.85)`,
               boxShadow: `0 0 0 1px hsl(${CORAL} / 0.6)`,
-              background: "hsl(0 0% 100% / 0.06)",
+              background: "hsl(259 80% 55% / 0.10)",
             }}
           >
             <span
@@ -227,10 +530,10 @@ export default function SettingsView({
             </span>
             <span className="min-w-0 flex-1">
               <span className="block text-sm font-semibold text-foreground">
-                Tahap {stage} · {currentInfo.name}
+                {s.stageLabel} {stage} · {pick(currentInfo.name, language)}
               </span>
               <span className="block truncate text-xs text-muted-foreground">
-                {currentInfo.goal}
+                {pick(currentInfo.goal, language)}
               </span>
             </span>
             <button
@@ -239,17 +542,16 @@ export default function SettingsView({
               className="shrink-0 rounded-full px-4 py-2 text-xs font-bold text-background transition-all active:scale-[0.97]"
               style={{ background: `hsl(${CORAL})`, boxShadow: `0 4px 16px -4px hsl(${CORAL} / 0.7)` }}
             >
-              Tukar
+              {s.change}
             </button>
           </div>
         </Section>
 
         {/* Developmental goals — shared with the onboarding picker */}
-        <Section icon={Target} title="Matlamat Perkembangan">
+        <Section icon={Target} title={s.goalsTitle}>
           <div className="flex items-start justify-between gap-3">
             <p className="text-xs leading-relaxed text-muted-foreground">
-              Matlamat aktif menjadi tumpuan Maya. Matlamat lain akan dibuka
-              tidak lama lagi.
+              {s.goalsDesc}
             </p>
             <button
               type="button"
@@ -257,7 +559,7 @@ export default function SettingsView({
               className="shrink-0 rounded-full px-4 py-2 text-xs font-bold text-background transition-all active:scale-[0.97]"
               style={{ background: `hsl(${CORAL})`, boxShadow: `0 4px 16px -4px hsl(${CORAL} / 0.7)` }}
             >
-              Tukar
+              {s.change}
             </button>
           </div>
 
@@ -268,7 +570,7 @@ export default function SettingsView({
               return (
                 <li
                   key={g.code}
-                  className="flex items-center gap-3 rounded-2xl bg-white/[0.03] px-4 py-3"
+                  className="flex items-center gap-3 rounded-2xl bg-[hsl(259_80%_55%/0.10)] px-4 py-3"
                 >
                   <span
                     className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-sm font-bold"
@@ -278,7 +580,7 @@ export default function SettingsView({
                             background: `hsl(${CORAL} / 0.18)`,
                             color: `hsl(${CORAL})`,
                           }
-                        : { background: "hsl(0 0% 100% / 0.05)" }
+                        : { background: "hsl(259 80% 55% / 0.08)" }
                     }
                   >
                     {active ? (
@@ -293,7 +595,7 @@ export default function SettingsView({
                       active ? "text-foreground" : "text-muted-foreground"
                     )}
                   >
-                    {g.aspiration}
+                    {pick(g.aspiration, language)}
                   </span>
                   {active ? (
                     <span
@@ -303,7 +605,7 @@ export default function SettingsView({
                         color: `hsl(${CORAL})`,
                       }}
                     >
-                      Aktif
+                      {s.active}
                     </span>
                   ) : soon ? (
                     <span
@@ -313,7 +615,7 @@ export default function SettingsView({
                         color: `hsl(${PURPLE_TEXT})`,
                       }}
                     >
-                      Akan datang
+                      {s.comingSoon}
                     </span>
                   ) : null}
                 </li>
@@ -323,10 +625,9 @@ export default function SettingsView({
         </Section>
 
         {/* Daily routines — summary, changed via a confirmed dialog */}
-        <Section icon={Clock} title="Rutin Harian">
+        <Section icon={Clock} title={s.routinesTitle}>
           <p className="text-xs leading-relaxed text-muted-foreground">
-            Rutin harian tempat Maya menyuntik aktiviti intervensi. Anda boleh ubah
-            pilihan ini pada bila-bila masa.
+            {s.routinesDesc}
           </p>
 
           <div
@@ -334,12 +635,12 @@ export default function SettingsView({
             style={{
               borderColor: `hsl(${CORAL} / 0.85)`,
               boxShadow: `0 0 0 1px hsl(${CORAL} / 0.6)`,
-              background: "hsl(0 0% 100% / 0.06)",
+              background: "hsl(259 80% 55% / 0.10)",
             }}
           >
             <div className="flex items-center justify-between gap-3">
               <span className="text-sm font-semibold text-foreground">
-                {routines.length} rutin dipilih
+                {routines.length} {s.routinesSelected}
               </span>
               <button
                 type="button"
@@ -347,7 +648,7 @@ export default function SettingsView({
                 className="shrink-0 rounded-full px-4 py-2 text-xs font-bold text-background transition-all active:scale-[0.97]"
                 style={{ background: `hsl(${CORAL})`, boxShadow: `0 4px 16px -4px hsl(${CORAL} / 0.7)` }}
               >
-                Tukar
+                {s.change}
               </button>
             </div>
 
@@ -359,12 +660,12 @@ export default function SettingsView({
                     className="rounded-full px-2.5 py-1 text-[11px] font-medium"
                     style={{ background: `hsl(${TEAL} / 0.14)`, color: `hsl(${TEAL})` }}
                   >
-                    {ROUTINE_LABELS[code] ?? code}
+                    {ROUTINE_LABELS[code] ? pick(ROUTINE_LABELS[code], language) : code}
                   </span>
                 ))
               ) : (
                 <span className="text-xs text-muted-foreground">
-                  Tiada rutin dipilih
+                  {s.noRoutinesSelected}
                 </span>
               )}
             </div>
@@ -372,20 +673,20 @@ export default function SettingsView({
         </Section>
 
         {/* Notifications */}
-        <Section icon={Bell} title="Pemberitahuan">
+        <Section icon={Bell} title={s.notificationsTitle}>
           <ToggleRow
-            label="Peringatan aktiviti harian"
-            description="Ingatkan saya untuk lengkapkan aktiviti hari ini."
+            label={s.dailyReminderLabel}
+            description={s.dailyReminderDesc}
             checked={dailyReminder}
             onChange={setDailyReminder}
           />
           {dailyReminder && (
-            <div className="flex items-center justify-between gap-3 rounded-2xl bg-white/[0.03] px-4 py-3">
+            <div className="flex items-center justify-between gap-3 rounded-2xl bg-[hsl(259_80%_55%/0.10)] px-4 py-3">
               <label
                 htmlFor="reminder-time"
                 className="text-sm font-medium text-foreground"
               >
-                Masa peringatan
+                {s.reminderTimeLabel}
               </label>
               <input
                 id="reminder-time"
@@ -398,61 +699,91 @@ export default function SettingsView({
             </div>
           )}
           <ToggleRow
-            label="Ringkasan kemajuan mingguan"
-            description="Hantar rumusan perkembangan anak setiap minggu."
+            label={s.weeklySummaryLabel}
+            description={s.weeklySummaryDesc}
             checked={weeklySummary}
             onChange={setWeeklySummary}
           />
         </Section>
 
         {/* Language */}
-        <Section icon={Globe} title="Bahasa">
+        <Section icon={Globe} title={t.settings.languageTitle}>
           <p className="text-xs leading-relaxed text-muted-foreground">
-            Pilih bahasa paparan aplikasi.
+            {t.settings.languageDesc}
           </p>
           <div className="grid grid-cols-2 gap-2">
             {[
-              { id: "ms" as const, label: "Bahasa Melayu", soon: false },
-              { id: "en" as const, label: "English", soon: true },
+              { id: "ms" as const, label: t.settings.langMs },
+              { id: "en" as const, label: t.settings.langEn },
             ].map((opt) => {
-              const active = !opt.soon && language === opt.id
+              const active = language === opt.id
               return (
                 <button
                   key={opt.id}
                   type="button"
-                  onClick={() => !opt.soon && setLanguage(opt.id)}
-                  disabled={opt.soon}
+                  onClick={() => setLanguage(opt.id)}
                   aria-pressed={active}
                   className={cn(
                     "relative flex items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold transition-all",
-                    opt.soon
-                      ? "cursor-not-allowed border-white/10 text-foreground/40"
-                      : active
-                        ? "bg-white/[0.06] text-foreground"
-                        : "border-white/10 text-foreground/70 hover:border-white/20 hover:text-foreground"
+                    active
+                      ? "bg-[hsl(259_80%_55%/0.10)] text-foreground"
+                      : "border-foreground/10 text-foreground/70 hover:border-foreground/30 hover:bg-foreground/5 hover:text-foreground"
                   )}
                   style={
                     active
                       ? {
-                          borderColor: `hsl(${TEAL} / 0.7)`,
-                          boxShadow: `inset 0 0 0 1px hsl(${TEAL} / 0.4)`,
-                          color: `hsl(${TEAL})`,
+                          borderColor: `hsl(${CORAL} / 0.7)`,
+                          boxShadow: `inset 0 0 0 1px hsl(${CORAL} / 0.4)`,
+                          color: `hsl(${CORAL})`,
                         }
                       : undefined
                   }
                 >
                   {opt.label}
-                  {opt.soon && (
-                    <span
-                      className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
-                      style={{
-                        background: `hsl(${CORAL} / 0.18)`,
-                        color: `hsl(${CORAL})`,
-                      }}
-                    >
-                      Akan datang
-                    </span>
+                  {active && <SelectedTick />}
+                </button>
+              )
+            })}
+          </div>
+        </Section>
+
+        {/* Theme — light / dark */}
+        <Section icon={theme === "dark" ? Moon : Sun} title={t.settings.themeTitle}>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {t.settings.themeDesc}
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { id: "light" as const, label: t.settings.themeLight, icon: Sun },
+              { id: "dark" as const, label: t.settings.themeDark, icon: Moon },
+            ].map((opt) => {
+              const active = theme === opt.id
+              const Icon = opt.icon
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setTheme(opt.id)}
+                  aria-pressed={active}
+                  className={cn(
+                    "relative flex items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold transition-all",
+                    active
+                      ? "bg-[hsl(259_80%_55%/0.10)] text-foreground"
+                      : "border-foreground/10 text-foreground/70 hover:border-foreground/30 hover:bg-foreground/5 hover:text-foreground dark:border-white/10"
                   )}
+                  style={
+                    active
+                      ? {
+                          borderColor: `hsl(${CORAL} / 0.7)`,
+                          boxShadow: `inset 0 0 0 1px hsl(${CORAL} / 0.4)`,
+                          color: `hsl(${CORAL})`,
+                        }
+                      : undefined
+                  }
+                >
+                  <Icon className="h-4 w-4" />
+                  {opt.label}
+                  {active && <SelectedTick />}
                 </button>
               )
             })}
@@ -460,10 +791,9 @@ export default function SettingsView({
         </Section>
 
         {/* AI voice for the daily-activity Papan AAC */}
-        <Section icon={Volume2} title="Suara AI">
+        <Section icon={Volume2} title={s.voiceTitle}>
           <p className="text-xs leading-relaxed text-muted-foreground">
-            Pilih suara yang membaca perkataan di Papan AAC aktiviti harian.
-            Ketik untuk dengar contoh.
+            {s.voiceDesc}
           </p>
           <div className="grid grid-cols-2 gap-2">
             {AAC_VOICE_OPTIONS.map((opt) => {
@@ -477,21 +807,21 @@ export default function SettingsView({
                   className={cn(
                     "relative flex flex-col items-start gap-0.5 rounded-2xl border px-4 py-3 text-left transition-all",
                     active
-                      ? "bg-white/[0.06]"
-                      : "border-white/10 hover:border-white/20 hover:bg-white/[0.03]"
+                      ? "bg-[hsl(259_80%_55%/0.10)]"
+                      : "border-foreground/10 hover:border-foreground/30 hover:bg-foreground/5"
                   )}
                   style={
                     active
                       ? {
-                          borderColor: `hsl(${TEAL} / 0.7)`,
-                          boxShadow: `inset 0 0 0 1px hsl(${TEAL} / 0.4)`,
+                          borderColor: `hsl(${CORAL} / 0.7)`,
+                          boxShadow: `inset 0 0 0 1px hsl(${CORAL} / 0.4)`,
                         }
                       : undefined
                   }
                 >
                   <span
                     className="flex items-center gap-1.5 text-sm font-semibold"
-                    style={active ? { color: `hsl(${TEAL})` } : undefined}
+                    style={active ? { color: `hsl(${CORAL})` } : undefined}
                   >
                     <Volume2 className="h-3.5 w-3.5" />
                     {opt.label}
@@ -499,14 +829,7 @@ export default function SettingsView({
                   <span className="text-xs text-muted-foreground">
                     {opt.description}
                   </span>
-                  {active && (
-                    <span
-                      className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full"
-                      style={{ background: `hsl(${TEAL})` }}
-                    >
-                      <Check className="h-3 w-3 text-background" strokeWidth={3} />
-                    </span>
-                  )}
+                  {active && <SelectedTick className="right-3 top-3" />}
                 </button>
               )
             })}
@@ -514,18 +837,17 @@ export default function SettingsView({
         </Section>
 
         {/* Account password — set one to log in without an email link */}
-        <Section icon={Lock} title="Kata Laluan">
+        <Section icon={Lock} title={s.passwordTitle}>
           <p className="text-xs leading-relaxed text-muted-foreground">
-            Tetapkan kata laluan untuk log masuk dengan lebih cepat, tanpa perlu
-            menunggu pautan e-mel.
+            {s.passwordDesc}
           </p>
           <input
             type="password"
             autoComplete="new-password"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
-            placeholder="Kata laluan baharu (sekurang-kurangnya 6 aksara)"
-            className="w-full rounded-2xl bg-white/[0.04] px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/80 outline-none focus:ring-2 focus:ring-ring"
+            placeholder={s.passwordPlaceholder}
+            className="w-full rounded-2xl bg-[hsl(259_80%_55%/0.10)] px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/80 outline-none focus:ring-2 focus:ring-ring"
             style={{ boxShadow: `inset 0 0 0 1px hsl(${TEAL} / 0.3)` }}
           />
           {pwMsg && (
@@ -545,8 +867,123 @@ export default function SettingsView({
             className="w-full rounded-2xl py-3 text-sm font-bold text-background transition-all active:scale-[0.99] disabled:opacity-40"
             style={{ background: `hsl(${CORAL})` }}
           >
-            {pwLoading ? "Menyimpan…" : "Tetapkan Kata Laluan"}
+            {pwLoading ? s.passwordSaving : s.passwordSet}
           </button>
+        </Section>
+
+        {/* Share with partner — co-parent invite + shared-with list */}
+        <Section icon={Users} title={s.shareTitle}>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {s.shareDesc}
+          </p>
+
+          {coGuardians.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                {s.sharedWith}
+              </p>
+              {coGuardians.map((g) => (
+                <div
+                  key={g.guardianId}
+                  className="flex items-center justify-between gap-3 rounded-2xl bg-[hsl(259_80%_55%/0.10)] px-4 py-2.5"
+                >
+                  <span className="min-w-0 truncate text-sm font-medium text-foreground">
+                    {g.name || s.roleParent}
+                  </span>
+                  <span
+                    className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                    style={{
+                      background: `hsl(${CORAL} / 0.16)`,
+                      color: `hsl(${CORAL})`,
+                    }}
+                  >
+                    {g.role === "owner" ? s.roleOwner : s.roleParent}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Generate / show the invite code */}
+          {inviteCode ? (
+            <div className="space-y-2">
+              <div
+                className="flex items-center gap-2 rounded-2xl border px-4 py-3"
+                style={{ borderColor: `hsl(${CORAL} / 0.4)` }}
+              >
+                <span className="min-w-0 flex-1 truncate font-mono text-lg font-bold tracking-[0.2em] text-foreground">
+                  {inviteCode}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopyInvite}
+                  className="flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold text-background transition-all active:scale-[0.97]"
+                  style={{ background: `hsl(${CORAL})` }}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  {copied ? s.copied : s.copy}
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={handleShareInvite}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-sm font-bold text-background transition-all active:scale-[0.99]"
+                style={{ background: `hsl(${CORAL})` }}
+              >
+                <Share2 className="h-4 w-4" />
+                {linkCopied ? s.linkCopied : s.shareLink}
+              </button>
+              <p className="text-xs text-muted-foreground">{s.codeHint}</p>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handleGenerateInvite}
+              disabled={genLoading}
+              className="w-full rounded-2xl py-3 text-sm font-bold text-background transition-all active:scale-[0.99] disabled:opacity-40"
+              style={{ background: `hsl(${CORAL})` }}
+            >
+              {genLoading ? s.generating : s.generateCode}
+            </button>
+          )}
+
+          {/* Join an existing child with a code */}
+          <div className="space-y-2 border-t border-border/60 pt-4">
+            <p className="text-sm font-semibold text-foreground">
+              {s.joinTitle}
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                value={joinInput}
+                onChange={(e) => setJoinInput(e.target.value)}
+                placeholder={s.joinPlaceholder}
+                autoCapitalize="characters"
+                className="h-11 min-w-0 flex-1 rounded-2xl bg-[hsl(259_80%_55%/0.10)] px-4 text-sm text-foreground placeholder:text-muted-foreground/80 outline-none focus:ring-2 focus:ring-ring"
+                style={{ boxShadow: `inset 0 0 0 1px hsl(${TEAL} / 0.3)` }}
+              />
+              <button
+                type="button"
+                onClick={handleJoin}
+                disabled={joinLoading || !joinInput.trim()}
+                className="h-11 shrink-0 rounded-2xl px-5 text-sm font-bold text-background transition-all active:scale-[0.97] disabled:opacity-40"
+                style={{ background: `hsl(${CORAL})` }}
+              >
+                {joinLoading ? s.joining : s.joinBtn}
+              </button>
+            </div>
+            {joinMsg && (
+              <p
+                className="text-xs font-medium"
+                style={{
+                  color: joinMsg.ok
+                    ? `hsl(${TEAL})`
+                    : "hsl(var(--destructive))",
+                }}
+              >
+                {joinMsg.text}
+              </p>
+            )}
+          </div>
         </Section>
       </div>
     </div>
@@ -607,6 +1044,8 @@ function StageChangeDialog({
   onConfirm: () => void
   onCancel: () => void
 }) {
+  const { lang } = useLang()
+  const s = STR[lang]
   const changed = pendingStage !== currentStage
   const target = STAGE_INFO[STAGE_ORDER[pendingStage - 1]]
 
@@ -623,25 +1062,25 @@ function StageChangeDialog({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Tukar tahap komunikasi"
-        className="relative flex max-h-[88vh] w-full max-w-md animate-fade-up flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-background/95 backdrop-blur-2xl sm:rounded-3xl"
+        aria-label={s.stageDialogAria}
+        className="relative flex max-h-[88vh] w-full max-w-md animate-fade-up flex-col overflow-hidden rounded-t-3xl border border-foreground/10 bg-background/95 backdrop-blur-2xl sm:rounded-3xl"
         style={{ animationFillMode: "both" }}
       >
         {/* Header */}
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border/60 px-5 py-4">
           <div className="min-w-0">
             <h2 className="text-base font-bold tracking-tight">
-              Tukar Tahap Komunikasi
+              {s.stageDialogTitle}
             </h2>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Pilih tahap baharu untuk anak anda, kemudian sahkan.
+              {s.stageDialogDesc}
             </p>
           </div>
           <button
             type="button"
             onClick={onCancel}
-            aria-label="Tutup"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
+            aria-label={s.close}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
           >
             <X className="h-5 w-5" />
           </button>
@@ -663,8 +1102,8 @@ function StageChangeDialog({
                 className={cn(
                   "flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-all",
                   selected
-                    ? "bg-white/[0.06]"
-                    : "border-white/10 hover:border-white/20 hover:bg-white/[0.03]"
+                    ? "bg-[hsl(259_80%_55%/0.10)]"
+                    : "border-foreground/10 hover:border-foreground/10 hover:bg-foreground/5"
                 )}
                 style={
                   selected
@@ -680,17 +1119,17 @@ function StageChangeDialog({
                   style={
                     selected
                       ? { background: `hsl(${CORAL} / 0.18)`, color: `hsl(${CORAL})` }
-                      : { background: "hsl(0 0% 100% / 0.05)" }
+                      : { background: "hsl(259 80% 55% / 0.08)" }
                   }
                 >
                   {selected ? <Check className="h-4 w-4" strokeWidth={3} /> : num}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-semibold text-foreground">
-                    Tahap {num} · {info.name}
+                    {s.stageLabel} {num} · {pick(info.name, lang)}
                   </span>
                   <span className="block truncate text-xs text-muted-foreground">
-                    {info.goal}
+                    {pick(info.goal, lang)}
                   </span>
                 </span>
                 {isCurrent && (
@@ -698,7 +1137,7 @@ function StageChangeDialog({
                     className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold"
                     style={{ background: `hsl(${TEAL} / 0.16)`, color: `hsl(${TEAL})` }}
                   >
-                    Semasa
+                    {s.current}
                   </span>
                 )}
               </button>
@@ -711,23 +1150,23 @@ function StageChangeDialog({
           <p className="text-center text-sm text-foreground/90">
             {changed ? (
               <>
-                Tukar tahap anak anda ke{" "}
+                {s.stageConfirmPrefix}{" "}
                 <span className="font-bold" style={{ color: `hsl(${CORAL})` }}>
-                  Tahap {pendingStage} · {target.name}
+                  {s.stageLabel} {pendingStage} · {pick(target.name, lang)}
                 </span>
                 ?
               </>
             ) : (
-              "Pilih tahap yang berbeza untuk menukar."
+              s.stageConfirmEmpty
             )}
           </p>
           <div className="grid grid-cols-2 gap-2.5">
             <button
               type="button"
               onClick={onCancel}
-              className="rounded-2xl py-3 text-sm font-semibold text-foreground transition-all active:scale-[0.99] glass hover:bg-white/[0.08]"
+              className="rounded-2xl py-3 text-sm font-semibold text-foreground transition-all active:scale-[0.99] glass hover:bg-foreground/5"
             >
-              Tidak
+              {s.no}
             </button>
             <button
               type="button"
@@ -739,7 +1178,7 @@ function StageChangeDialog({
                 boxShadow: changed ? `0 0 24px -6px hsl(${CORAL} / 0.7)` : "none",
               }}
             >
-              Ya, Tukar
+              {s.confirmChange}
             </button>
           </div>
         </div>
@@ -768,6 +1207,8 @@ function GoalChangeDialog({
   onConfirm: () => void
   onCancel: () => void
 }) {
+  const { lang } = useLang()
+  const s = STR[lang]
   const changed = !!pendingGoal && pendingGoal !== currentGoal
   const target = GOALS.find((g) => g.code === pendingGoal)
 
@@ -784,25 +1225,25 @@ function GoalChangeDialog({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Tukar matlamat utama"
-        className="relative flex max-h-[88vh] w-full max-w-md animate-fade-up flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-background/95 backdrop-blur-2xl sm:rounded-3xl"
+        aria-label={s.goalDialogAria}
+        className="relative flex max-h-[88vh] w-full max-w-md animate-fade-up flex-col overflow-hidden rounded-t-3xl border border-foreground/10 bg-background/95 backdrop-blur-2xl sm:rounded-3xl"
         style={{ animationFillMode: "both" }}
       >
         {/* Header */}
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border/60 px-5 py-4">
           <div className="min-w-0">
             <h2 className="text-base font-bold tracking-tight">
-              Tukar Matlamat Utama
+              {s.goalDialogTitle}
             </h2>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Pilih matlamat baharu untuk anak anda, kemudian sahkan.
+              {s.goalDialogDesc}
             </p>
           </div>
           <button
             type="button"
             onClick={onCancel}
-            aria-label="Tutup"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
+            aria-label={s.close}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
           >
             <X className="h-5 w-5" />
           </button>
@@ -824,10 +1265,10 @@ function GoalChangeDialog({
                 className={cn(
                   "flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-all",
                   soon
-                    ? "cursor-not-allowed border-white/10 opacity-55"
+                    ? "cursor-not-allowed border-foreground/10 opacity-55"
                     : selected
-                      ? "bg-white/[0.06]"
-                      : "border-white/10 hover:border-white/20 hover:bg-white/[0.03]"
+                      ? "bg-[hsl(259_80%_55%/0.10)]"
+                      : "border-foreground/10 hover:border-foreground/10 hover:bg-foreground/5"
                 )}
                 style={
                   selected && !soon
@@ -843,7 +1284,7 @@ function GoalChangeDialog({
                   style={
                     selected && !soon
                       ? { background: `hsl(${CORAL} / 0.18)`, color: `hsl(${CORAL})` }
-                      : { background: "hsl(0 0% 100% / 0.05)" }
+                      : { background: "hsl(259 80% 55% / 0.08)" }
                   }
                 >
                   {selected && !soon ? (
@@ -851,7 +1292,7 @@ function GoalChangeDialog({
                   ) : null}
                 </span>
                 <span className="min-w-0 flex-1 text-sm font-semibold text-foreground">
-                  {g.aspiration}
+                  {pick(g.aspiration, lang)}
                 </span>
                 {soon ? (
                   <span
@@ -862,14 +1303,14 @@ function GoalChangeDialog({
                     }}
                   >
                     <Lock className="h-2.5 w-2.5" strokeWidth={2.5} />
-                    Akan datang
+                    {s.comingSoon}
                   </span>
                 ) : isCurrent ? (
                   <span
                     className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold"
                     style={{ background: `hsl(${TEAL} / 0.16)`, color: `hsl(${TEAL})` }}
                   >
-                    Semasa
+                    {s.current}
                   </span>
                 ) : null}
               </button>
@@ -882,23 +1323,23 @@ function GoalChangeDialog({
           <p className="text-center text-sm text-foreground/90">
             {changed ? (
               <>
-                Tukar matlamat utama anak anda ke{" "}
+                {s.goalConfirmPrefix}{" "}
                 <span className="font-bold" style={{ color: `hsl(${CORAL})` }}>
-                  “{target?.aspiration}”
+                  “{target ? pick(target.aspiration, lang) : ""}”
                 </span>
                 ?
               </>
             ) : (
-              "Pilih matlamat yang berbeza untuk menukar."
+              s.goalConfirmEmpty
             )}
           </p>
           <div className="grid grid-cols-2 gap-2.5">
             <button
               type="button"
               onClick={onCancel}
-              className="rounded-2xl py-3 text-sm font-semibold text-foreground transition-all active:scale-[0.99] glass hover:bg-white/[0.08]"
+              className="rounded-2xl py-3 text-sm font-semibold text-foreground transition-all active:scale-[0.99] glass hover:bg-foreground/5"
             >
-              Tidak
+              {s.no}
             </button>
             <button
               type="button"
@@ -910,7 +1351,7 @@ function GoalChangeDialog({
                 boxShadow: changed ? `0 0 24px -6px hsl(${CORAL} / 0.7)` : "none",
               }}
             >
-              Ya, Tukar
+              {s.confirmChange}
             </button>
           </div>
         </div>
@@ -939,6 +1380,8 @@ function RoutineChangeDialog({
   onConfirm: () => void
   onCancel: () => void
 }) {
+  const { lang } = useLang()
+  const s = STR[lang]
   const empty = pendingRoutines.length === 0
   const changed = !sameRoutines(currentRoutines, pendingRoutines)
   const canConfirm = !empty && changed
@@ -956,25 +1399,25 @@ function RoutineChangeDialog({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Tukar rutin harian"
-        className="relative flex max-h-[88vh] w-full max-w-md animate-fade-up flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-background/95 backdrop-blur-2xl sm:rounded-3xl"
+        aria-label={s.routineDialogAria}
+        className="relative flex max-h-[88vh] w-full max-w-md animate-fade-up flex-col overflow-hidden rounded-t-3xl border border-foreground/10 bg-background/95 backdrop-blur-2xl sm:rounded-3xl"
         style={{ animationFillMode: "both" }}
       >
         {/* Header */}
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border/60 px-5 py-4">
           <div className="min-w-0">
             <h2 className="text-base font-bold tracking-tight">
-              Tukar Rutin Harian
+              {s.routineDialogTitle}
             </h2>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Pilih rutin harian anda, kemudian sahkan.
+              {s.routineDialogDesc}
             </p>
           </div>
           <button
             type="button"
             onClick={onCancel}
-            aria-label="Tutup"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
+            aria-label={s.close}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
           >
             <X className="h-5 w-5" />
           </button>
@@ -996,10 +1439,10 @@ function RoutineChangeDialog({
                 className={cn(
                   "flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-all",
                   soon
-                    ? "cursor-not-allowed border-white/10 opacity-55"
+                    ? "cursor-not-allowed border-foreground/10 opacity-55"
                     : selected
-                      ? "bg-white/[0.06]"
-                      : "border-white/10 hover:border-white/20 hover:bg-white/[0.03]"
+                      ? "bg-[hsl(259_80%_55%/0.10)]"
+                      : "border-foreground/10 hover:border-foreground/10 hover:bg-foreground/5"
                 )}
                 style={
                   selected && !soon
@@ -1013,7 +1456,7 @@ function RoutineChangeDialog({
                 <span
                   className={cn(
                     "flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border transition-all",
-                    selected && !soon ? "border-transparent" : "border-white/25"
+                    selected && !soon ? "border-transparent" : "border-foreground/10"
                   )}
                   style={selected && !soon ? { background: `hsl(${CORAL})` } : undefined}
                   aria-hidden
@@ -1023,7 +1466,7 @@ function RoutineChangeDialog({
                   )}
                 </span>
                 <span className="min-w-0 flex-1 text-sm font-semibold text-foreground">
-                  {name}
+                  {pick(name, lang)}
                 </span>
                 {soon ? (
                   <span
@@ -1034,14 +1477,14 @@ function RoutineChangeDialog({
                     }}
                   >
                     <Lock className="h-2.5 w-2.5" strokeWidth={2.5} />
-                    Akan datang
+                    {s.comingSoon}
                   </span>
                 ) : isCurrent ? (
                   <span
                     className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold"
                     style={{ background: `hsl(${TEAL} / 0.16)`, color: `hsl(${TEAL})` }}
                   >
-                    Semasa
+                    {s.current}
                   </span>
                 ) : null}
               </button>
@@ -1053,18 +1496,18 @@ function RoutineChangeDialog({
         <div className="shrink-0 space-y-3 border-t border-border/60 px-5 py-4">
           <p className="text-center text-sm text-foreground/90">
             {empty
-              ? "Pilih sekurang-kurangnya 1 rutin."
+              ? s.routineConfirmEmpty
               : !changed
-                ? "Tiada perubahan dibuat."
-                : `Simpan ${pendingRoutines.length} rutin harian anda?`}
+                ? s.routineNoChange
+                : `${s.routineConfirmPrefix} ${pendingRoutines.length} ${s.routineConfirmSuffix}`}
           </p>
           <div className="grid grid-cols-2 gap-2.5">
             <button
               type="button"
               onClick={onCancel}
-              className="rounded-2xl py-3 text-sm font-semibold text-foreground transition-all active:scale-[0.99] glass hover:bg-white/[0.08]"
+              className="rounded-2xl py-3 text-sm font-semibold text-foreground transition-all active:scale-[0.99] glass hover:bg-foreground/5"
             >
-              Tidak
+              {s.no}
             </button>
             <button
               type="button"
@@ -1076,7 +1519,7 @@ function RoutineChangeDialog({
                 boxShadow: canConfirm ? `0 0 24px -6px hsl(${CORAL} / 0.7)` : "none",
               }}
             >
-              Ya, Simpan
+              {s.confirmSave}
             </button>
           </div>
         </div>
@@ -1086,6 +1529,22 @@ function RoutineChangeDialog({
 }
 
 /* -------------------------------------------------------------------------- */
+
+/** The violet "selected" tick badge — shared by every chosen option button so
+ *  selection reads the same across Bahasa, Tema, and Suara AI. */
+function SelectedTick({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn(
+        "absolute flex h-5 w-5 items-center justify-center rounded-full",
+        className ?? "right-2.5 top-1/2 -translate-y-1/2"
+      )}
+      style={{ background: `hsl(${CORAL})` }}
+    >
+      <Check className="h-3 w-3 text-background" strokeWidth={3} />
+    </span>
+  )
+}
 
 function Section({
   icon: Icon,
@@ -1098,7 +1557,7 @@ function Section({
 }) {
   return (
     <section className="space-y-4 rounded-3xl glass-strong p-5">
-      <h3 className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+      <h3 className="font-display flex items-center gap-2 text-sm font-semibold tracking-tight">
         <Icon className="h-4 w-4" style={{ color: `hsl(${CORAL})` }} />
         {title}
       </h3>
@@ -1133,7 +1592,7 @@ function ToggleRow({
         onClick={() => onChange(!checked)}
         className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full px-0.5 transition-colors"
         style={{
-          background: checked ? `hsl(${CORAL})` : "hsl(0 0% 100% / 0.12)",
+          background: checked ? `hsl(${CORAL})` : "hsl(var(--foreground) / 0.08)",
         }}
       >
         <span

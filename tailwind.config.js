@@ -10,6 +10,7 @@ export default {
     extend: {
       fontFamily: {
         sans: ["Inter", "system-ui", "sans-serif"],
+        display: ["Poppins", "ui-rounded", "system-ui", "sans-serif"],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -41,10 +42,10 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-        // Brand neon palette
+        // Brand accents
         neon: {
-          cyan: "hsl(187 100% 50%)",
-          purple: "hsl(270 95% 65%)",
+          cyan: "hsl(247 74% 63%)", // periwinkle (Maya/AI)
+          purple: "hsl(259 80% 55%)", // Tutur Violet
         },
       },
       borderRadius: {
@@ -53,8 +54,8 @@ export default {
         sm: "calc(var(--radius) - 4px)",
       },
       boxShadow: {
-        "glow-cyan": "0 0 20px -2px hsl(187 100% 50% / 0.55), 0 0 40px -10px hsl(187 100% 50% / 0.35)",
-        "glow-purple": "0 0 20px -2px hsl(270 95% 65% / 0.55), 0 0 40px -10px hsl(270 95% 65% / 0.35)",
+        "glow-cyan": "0 10px 24px -8px hsl(259 80% 55% / 0.4), 0 2px 8px -4px hsl(259 80% 55% / 0.25)",
+        "glow-purple": "0 10px 24px -8px hsl(259 80% 55% / 0.4), 0 2px 8px -4px hsl(259 80% 55% / 0.25)",
       },
       keyframes: {
         "fade-up": {
@@ -74,8 +75,8 @@ export default {
           "100%": { backgroundPosition: "200% 0" },
         },
         "pulse-glow": {
-          "0%, 100%": { boxShadow: "0 0 20px -4px hsl(187 100% 50% / 0.5)" },
-          "50%": { boxShadow: "0 0 34px 2px hsl(187 100% 50% / 0.8)" },
+          "0%, 100%": { boxShadow: "0 8px 22px -8px hsl(259 80% 55% / 0.45)" },
+          "50%": { boxShadow: "0 12px 30px -6px hsl(259 80% 55% / 0.6)" },
         },
         float: {
           "0%, 100%": { transform: "translateY(0)" },

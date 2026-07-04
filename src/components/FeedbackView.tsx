@@ -1,262 +1,60 @@
 import { useMemo, useState } from "react"
 import { cn } from "@/lib/utils"
 import { saveFeedback } from "@/lib/db"
+import { SECTIONS, ALL_QUESTIONS } from "@/lib/survey"
+import { useLang, pick } from "@/lib/i18n"
 import { Check, Heart, Loader2, Send } from "lucide-react"
+
+const STR = {
+  ms: {
+    heading: "Borang Maklum Balas Pengguna Tutur",
+    intro:
+      "Terima kasih kerana mencuba Tutur. Maklum balas anda amat penting untuk membantu kami menambah baik pengalaman dan memastikan Tutur benar-benar membantu menyokong perkembangan komunikasi anak.",
+    submit: "Hantar Maklum Balas",
+    submitting: "Menghantar…",
+    error: "Gagal menghantar maklum balas. Sila cuba lagi.",
+    thankYou: "Terima kasih! 💛",
+    thankYouBody:
+      "Maklum balas anda telah dihantar. Setiap pandangan anda membantu kami menjadikan Tutur lebih baik untuk anda dan anak anda.",
+    answerPlaceholder: "Jawapan anda…",
+    otherPlaceholder: "Lain-lain…",
+    optionalPlaceholder: "Pilihan (boleh dikosongkan)…",
+    progressAnswered: "soalan dijawab",
+    progressRequirement: "sekurang-kurangnya soalan 1 diperlukan",
+  },
+  en: {
+    heading: "Tutur User Feedback Form",
+    intro:
+      "Thank you for trying Tutur. Your feedback matters a great deal — it helps us improve the experience and make sure Tutur truly supports your child's communication development.",
+    submit: "Send Feedback",
+    submitting: "Sending…",
+    error: "Failed to send feedback. Please try again.",
+    thankYou: "Thank you! 💛",
+    thankYouBody:
+      "Your feedback has been sent. Every bit of your input helps us make Tutur better for you and your child.",
+    answerPlaceholder: "Your answer…",
+    otherPlaceholder: "Other…",
+    optionalPlaceholder: "Optional (may be left blank)…",
+    progressAnswered: "questions answered",
+    progressRequirement: "at least question 1 is required",
+  },
+} as const
 
 /* ========================================================================== *
  *  FeedbackView — Borang Maklum Balas Pengguna Tutur.
  *
  *  A data-driven survey (3 sections) saved to Supabase as one JSON row. Scales,
- *  single/multi choice, and open-text are all rendered from the QUESTIONS data
- *  so the survey can change without touching the rendering logic.
+ *  single/multi choice, and open-text are all rendered from the shared SECTIONS
+ *  data (see src/lib/survey.ts) so the survey can change without touching the
+ *  rendering logic — and the admin Wawasan dashboard reads the same definition.
  * ========================================================================== */
 
-const CORAL = "12 100% 64%"
-const TEAL = "172 66% 50%"
-
-// The three 5-point scales used across the form.
-const AGREE = [
-  "Sangat Tidak Setuju",
-  "Tidak Setuju",
-  "Neutral",
-  "Setuju",
-  "Sangat Setuju",
-]
-const SATISFY = [
-  "Sangat Tidak Puas Hati",
-  "Tidak Puas Hati",
-  "Neutral",
-  "Puas Hati",
-  "Sangat Puas Hati",
-]
-const RECOMMEND = [
-  "Sangat Tidak Mungkin",
-  "Tidak Mungkin",
-  "Tidak Pasti",
-  "Mungkin",
-  "Sangat Mungkin",
-]
-
-type Question = {
-  id: string
-  no: number
-  text: string
-  type: "scale" | "single" | "multi" | "text"
-  scale?: string[]
-  options?: string[]
-  other?: boolean // include a "Lain-lain" free-text option (multi/single)
-  followUp?: string // an open-text prompt shown under the choice
-  long?: boolean // textarea (vs input) for "text" questions
-}
-
-type Section = { key: string; title: string; questions: Question[] }
-
-const SECTIONS: Section[] = [
-  {
-    key: "A",
-    title: "Bahagian A: Pengalaman Menggunakan Tutur",
-    questions: [
-      {
-        id: "q1",
-        no: 1,
-        text: "Secara keseluruhan, sejauh manakah anda berpuas hati menggunakan Tutur?",
-        type: "scale",
-        scale: SATISFY,
-        followUp: "Apakah sebab utama anda memberikan skor tersebut?",
-      },
-      {
-        id: "q2",
-        no: 2,
-        text: "Sejauh manakah anda akan mencadangkan Tutur kepada ibu bapa atau penjaga lain?",
-        type: "scale",
-        scale: RECOMMEND,
-        followUp: "Apakah sebab utama anda memberikan skor tersebut?",
-      },
-      {
-        id: "q3",
-        no: 3,
-        text: "Saya bercadang untuk terus menggunakan Tutur selepas tempoh percubaan ini.",
-        type: "scale",
-        scale: AGREE,
-        followUp:
-          "Apakah SATU perkara yang anda ingin ubah, tambah atau perbaiki dalam Tutur?",
-      },
-      {
-        id: "q4",
-        no: 4,
-        text: "Tutur membantu saya menjalankan aktiviti atau latihan komunikasi bersama anak saya.",
-        type: "scale",
-        scale: AGREE,
-        followUp:
-          "Jika ya, boleh kongsikan pengalaman atau perubahan yang anda perhatikan?",
-      },
-      {
-        id: "q5",
-        no: 5,
-        text: "Aktiviti harian dalam Tutur mudah disesuaikan dengan rutin harian keluarga saya (contohnya semasa makan, mandi, bermain atau membaca).",
-        type: "scale",
-        scale: AGREE,
-        followUp: "Jika tidak, apakah cabaran yang anda hadapi?",
-      },
-      {
-        id: "q6",
-        no: 6,
-        text: "Selepas menggunakan Tutur, saya berasa lebih yakin untuk membantu perkembangan komunikasi anak saya.",
-        type: "scale",
-        scale: AGREE,
-      },
-      {
-        id: "q7",
-        no: 7,
-        text: "Saya berasa disokong dan digalakkan oleh Tutur, dan bukannya dihakimi.",
-        type: "scale",
-        scale: AGREE,
-      },
-      {
-        id: "q8",
-        no: 8,
-        text: "Mudah untuk memahami apa yang perlu dilakukan dan cara menggunakan aplikasi Tutur.",
-        type: "scale",
-        scale: AGREE,
-        followUp: "Bahagian manakah yang paling mengelirukan atau sukar difahami?",
-      },
-      {
-        id: "q9",
-        no: 9,
-        text: "Maya (Pembantu AI Tutur) membantu saya dengan jelas, mesra dan mudah difahami.",
-        type: "scale",
-        scale: AGREE,
-        followUp: "Apakah yang anda suka atau kurang suka tentang Maya AI?",
-      },
-      {
-        id: "q10",
-        no: 10,
-        text: "Saya memahami dan percaya bahawa latihan kecil yang dilakukan secara konsisten dapat membantu perkembangan komunikasi anak.",
-        type: "scale",
-        scale: AGREE,
-        followUp: "Mengapa anda berpendapat demikian?",
-      },
-      {
-        id: "q11",
-        no: 11,
-        text: "Bahasa, contoh situasi dan perkataan dalam Papan AAC sesuai dengan kehidupan harian saya dan anak saya.",
-        type: "scale",
-        scale: AGREE,
-        followUp: "Jika tidak, apakah yang boleh diperbaiki?",
-      },
-      {
-        id: "q12",
-        no: 12,
-        text: "Pada pendapat anda, penggunaan Papan AAC dalam aplikasi Tutur adalah berkesan untuk membantu komunikasi anak.",
-        type: "scale",
-        scale: AGREE,
-      },
-      {
-        id: "q13",
-        no: 13,
-        text: "Jika dibandingkan dengan peranti AAC fizikal (hardware AAC), yang manakah anda lebih gemari?",
-        type: "single",
-        options: [
-          "Papan AAC dalam aplikasi Tutur",
-          "Peranti AAC fizikal (hardware AAC)",
-          "Kedua-duanya sama membantu",
-          "Tidak pasti",
-        ],
-        followUp: "Mengapa anda memilih jawapan tersebut?",
-      },
-    ],
-  },
-  {
-    key: "B",
-    title: "Bahagian B: Pengalaman Sebelum Menggunakan Tutur",
-    questions: [
-      {
-        id: "q14",
-        no: 14,
-        text: "Sebelum ini, pernahkah anda menggunakan aplikasi lain untuk membantu perkembangan anak?",
-        type: "single",
-        options: ["Ya", "Tidak"],
-        followUp: "Jika ya, apakah aplikasi tersebut?",
-      },
-      {
-        id: "q15",
-        no: 15,
-        text: "Jika anda pernah menggunakan aplikasi lain, apakah yang menyebabkan anda berhenti menggunakannya?",
-        type: "text",
-        long: true,
-      },
-      {
-        id: "q16",
-        no: 16,
-        text: "Selain aplikasi mudah alih, apakah medium yang paling anda selesa gunakan untuk mendapatkan panduan membantu anak? (Boleh pilih lebih daripada satu)",
-        type: "multi",
-        options: [
-          "WhatsApp / Telegram",
-          "Video pendek",
-          "Podcast",
-          "Facebook Group / Komuniti",
-          "Bengkel atau kelas fizikal",
-          "Sesi bersama ahli terapi",
-          "Buku atau artikel",
-          "Laman web",
-        ],
-        other: true,
-      },
-    ],
-  },
-  {
-    key: "C",
-    title: "Bahagian C: Penggunaan dan Cadangan",
-    questions: [
-      {
-        id: "q17",
-        no: 17,
-        text: "Sepanjang tempoh percubaan, berapa kerap anda menggunakan Tutur?",
-        type: "single",
-        options: [
-          "Setiap hari",
-          "4–6 kali seminggu",
-          "2–3 kali seminggu",
-          "Sekali seminggu",
-          "Kurang daripada sekali seminggu",
-        ],
-      },
-      {
-        id: "q18",
-        no: 18,
-        text: "Pada pendapat anda, siapakah yang paling sesuai menggunakan Tutur? (Boleh pilih lebih daripada satu)",
-        type: "multi",
-        options: [
-          "Ibu bapa",
-          "Datuk / Nenek",
-          "Pengasuh",
-          "Guru Pendidikan Khas",
-          "Guru Prasekolah / Tadika",
-          "Ahli Terapi Pertuturan Bahasa",
-          "Semua di atas",
-        ],
-        other: true,
-      },
-      {
-        id: "q19",
-        no: 19,
-        text: "Jika anda boleh menggambarkan Tutur dengan satu perkataan atau satu ayat, apakah yang anda akan katakan?",
-        type: "text",
-      },
-      {
-        id: "q20",
-        no: 20,
-        text: "Adakah anda mempunyai sebarang cadangan lain untuk membantu kami menambah baik Tutur?",
-        type: "text",
-        long: true,
-      },
-    ],
-  },
-]
-
-const ALL_QUESTIONS = SECTIONS.flatMap((s) => s.questions)
+const CORAL = "259 80% 55%"
+const TEAL = "180 68% 34%"
 
 export default function FeedbackView() {
+  const { lang } = useLang()
+  const s = STR[lang]
   const [res, setRes] = useState<Record<string, string | string[]>>({})
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
@@ -292,7 +90,7 @@ export default function FeedbackView() {
     const ok = await saveFeedback(res)
     setSubmitting(false)
     if (!ok) {
-      setError("Gagal menghantar maklum balas. Sila cuba lagi.")
+      setError(s.error)
       return
     }
     setDone(true)
@@ -314,10 +112,9 @@ export default function FeedbackView() {
           >
             <Heart className="h-7 w-7" style={{ color: `hsl(${TEAL})` }} />
           </span>
-          <h2 className="mt-5 text-xl font-bold tracking-tight">Terima kasih! 💛</h2>
+          <h2 className="mt-5 text-xl font-bold tracking-tight">{s.thankYou}</h2>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            Maklum balas anda telah dihantar. Setiap pandangan anda membantu kami
-            menjadikan Tutur lebih baik untuk anda dan anak anda.
+            {s.thankYouBody}
           </p>
         </div>
       </div>
@@ -330,12 +127,10 @@ export default function FeedbackView() {
         {/* Intro */}
         <header>
           <h2 className="text-lg font-bold tracking-tight">
-            Borang Maklum Balas Pengguna Tutur
+            {s.heading}
           </h2>
           <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-            Terima kasih kerana mencuba Tutur. Maklum balas anda amat penting
-            untuk membantu kami menambah baik pengalaman dan memastikan Tutur
-            benar-benar membantu menyokong perkembangan komunikasi anak.
+            {s.intro}
           </p>
         </header>
 
@@ -345,44 +140,52 @@ export default function FeedbackView() {
               className="rounded-2xl px-4 py-2.5 text-sm font-bold"
               style={{ background: `hsl(${CORAL} / 0.12)`, color: `hsl(${CORAL})` }}
             >
-              {section.title}
+              {pick(section.title, lang)}
             </h3>
 
-            {section.questions.map((q) => (
+            {section.questions.map((q) => {
+              // Options: display in the current language, but STORE the canonical
+              // Bahasa Malaysia value so analytics aggregate consistently.
+              const optsLoc = q.scale ?? q.options
+              const display = optsLoc ? pick(optsLoc, lang) : []
+              const canonical = optsLoc ? optsLoc.ms : []
+              return (
               <div key={q.id} className="rounded-3xl glass-strong p-5">
                 <p className="text-sm font-semibold leading-relaxed">
-                  <span style={{ color: `hsl(${CORAL})` }}>{q.no}.</span> {q.text}
+                  <span style={{ color: `hsl(${CORAL})` }}>{q.no}.</span>{" "}
+                  {pick(q.text, lang)}
                 </p>
 
                 <div className="mt-3.5 space-y-2">
                   {/* Scale + single choice — selectable rows */}
                   {(q.type === "scale" || q.type === "single") &&
-                    (q.scale ?? q.options ?? []).map((opt) => {
-                      const selected = res[q.id] === opt
+                    display.map((label, i) => {
+                      const value = canonical[i]
                       return (
                         <OptionRow
-                          key={opt}
-                          label={opt}
-                          selected={selected}
+                          key={value}
+                          label={label}
+                          selected={res[q.id] === value}
                           shape="radio"
-                          onClick={() => setVal(q.id, opt)}
+                          onClick={() => setVal(q.id, value)}
                         />
                       )
                     })}
 
                   {/* Multi choice — checkboxes */}
                   {q.type === "multi" &&
-                    (q.options ?? []).map((opt) => {
+                    display.map((label, i) => {
+                      const value = canonical[i]
                       const cur = Array.isArray(res[q.id])
                         ? (res[q.id] as string[])
                         : []
                       return (
                         <OptionRow
-                          key={opt}
-                          label={opt}
-                          selected={cur.includes(opt)}
+                          key={value}
+                          label={label}
+                          selected={cur.includes(value)}
                           shape="check"
-                          onClick={() => toggleMulti(q.id, opt)}
+                          onClick={() => toggleMulti(q.id, value)}
                         />
                       )
                     })}
@@ -393,8 +196,8 @@ export default function FeedbackView() {
                       type="text"
                       value={(res[`${q.id}_other`] as string) ?? ""}
                       onChange={(e) => setVal(`${q.id}_other`, e.target.value)}
-                      placeholder="Lain-lain…"
-                      className="w-full rounded-2xl bg-white/[0.04] px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/80 outline-none focus:ring-2 focus:ring-ring"
+                      placeholder={s.otherPlaceholder}
+                      className="w-full rounded-2xl bg-[hsl(252_32%_97%)] px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/80 outline-none focus:ring-2 focus:ring-ring"
                       style={{ boxShadow: `inset 0 0 0 1px hsl(${TEAL} / 0.25)` }}
                     />
                   )}
@@ -406,8 +209,8 @@ export default function FeedbackView() {
                         rows={3}
                         value={(res[q.id] as string) ?? ""}
                         onChange={(e) => setVal(q.id, e.target.value)}
-                        placeholder="Jawapan anda…"
-                        className="w-full resize-none rounded-2xl bg-white/[0.04] p-4 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground/80 outline-none focus:ring-2 focus:ring-ring"
+                        placeholder={s.answerPlaceholder}
+                        className="w-full resize-none rounded-2xl bg-[hsl(252_32%_97%)] p-4 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground/80 outline-none focus:ring-2 focus:ring-ring"
                         style={{ boxShadow: `inset 0 0 0 1px hsl(${TEAL} / 0.25)` }}
                       />
                     ) : (
@@ -415,8 +218,8 @@ export default function FeedbackView() {
                         type="text"
                         value={(res[q.id] as string) ?? ""}
                         onChange={(e) => setVal(q.id, e.target.value)}
-                        placeholder="Jawapan anda…"
-                        className="w-full rounded-2xl bg-white/[0.04] px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/80 outline-none focus:ring-2 focus:ring-ring"
+                        placeholder={s.answerPlaceholder}
+                        className="w-full rounded-2xl bg-[hsl(252_32%_97%)] px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/80 outline-none focus:ring-2 focus:ring-ring"
                         style={{ boxShadow: `inset 0 0 0 1px hsl(${TEAL} / 0.25)` }}
                       />
                     ))}
@@ -425,21 +228,22 @@ export default function FeedbackView() {
                   {q.followUp && (
                     <div className="pt-1">
                       <p className="mb-1.5 text-xs text-muted-foreground">
-                        {q.followUp}
+                        {pick(q.followUp, lang)}
                       </p>
                       <textarea
                         rows={2}
                         value={(res[`${q.id}_text`] as string) ?? ""}
                         onChange={(e) => setVal(`${q.id}_text`, e.target.value)}
-                        placeholder="Pilihan (boleh dikosongkan)…"
-                        className="w-full resize-none rounded-2xl bg-white/[0.04] p-4 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground/80 outline-none focus:ring-2 focus:ring-ring"
+                        placeholder={s.optionalPlaceholder}
+                        className="w-full resize-none rounded-2xl bg-[hsl(252_32%_97%)] p-4 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground/80 outline-none focus:ring-2 focus:ring-ring"
                         style={{ boxShadow: `inset 0 0 0 1px hsl(${TEAL} / 0.2)` }}
                       />
                     </div>
                   )}
                 </div>
               </div>
-            ))}
+              )
+            })}
           </section>
         ))}
 
@@ -460,18 +264,18 @@ export default function FeedbackView() {
           {submitting ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              Menghantar…
+              {s.submitting}
             </>
           ) : (
             <>
               <Send className="h-4 w-4" />
-              Hantar Maklum Balas
+              {s.submit}
             </>
           )}
         </button>
         <p className="pb-2 text-center text-xs text-muted-foreground">
-          {answered}/{ALL_QUESTIONS.length} soalan dijawab · sekurang-kurangnya
-          soalan 1 diperlukan
+          {answered}/{ALL_QUESTIONS.length} {s.progressAnswered} ·{" "}
+          {s.progressRequirement}
         </p>
       </div>
     </div>
@@ -498,8 +302,8 @@ function OptionRow({
       className={cn(
         "flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left text-sm transition-all",
         selected
-          ? "bg-white/[0.06] text-foreground"
-          : "border-white/10 text-foreground/80 hover:border-white/20 hover:bg-white/[0.03]"
+          ? "bg-[hsl(259_80%_55%/0.10)] text-foreground"
+          : "border-foreground/10 text-foreground/80 hover:border-foreground/10 hover:bg-foreground/5"
       )}
       style={
         selected
@@ -514,7 +318,7 @@ function OptionRow({
         className={cn(
           "flex h-5 w-5 shrink-0 items-center justify-center border transition-all",
           shape === "radio" ? "rounded-full" : "rounded-md",
-          selected ? "border-transparent" : "border-white/30"
+          selected ? "border-transparent" : "border-foreground/20"
         )}
         style={selected ? { background: `hsl(${CORAL})` } : undefined}
         aria-hidden

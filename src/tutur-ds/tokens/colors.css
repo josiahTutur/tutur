@@ -1,0 +1,124 @@
+/* ============================================================
+   tutur · Color tokens  (aligned to Brand Book v1.0)
+   Violet is primary — "between the calm of blue and the warmth
+   of red", breaking from clinical medical blues. Lime is the
+   energy accent, periwinkle carries community/marketing, and a
+   small system palette colour-codes learning content.
+   ============================================================ */
+:root {
+  /* ---- Brand violet (primary) · 500 = Tutur Violet #6A2FE8 ---- */
+  --violet-50:  #F0EAFE;  /* violet-wash */
+  --violet-100: #E1D3FD;
+  --violet-200: #C7AEFB;
+  --violet-300: #A886F9;
+  --violet-400: #8B5CFF;  /* violet-light — gradient start */
+  --violet-500: #6A2FE8;  /* Tutur Violet — primary */
+  --violet-600: #5215C9;  /* gradient end */
+  --violet-700: #4E18C4;  /* violet-deep */
+  --violet-800: #3A138F;
+  --violet-900: #26155C;  /* violet-ink */
+
+  /* ---- Lime (energy accent · highlights, celebration) ---- */
+  --lime-50:  #F4FBE6;
+  --lime-100: #E7F6C7;
+  --lime-200: #D2EF97;
+  --lime-400: #AEE85A;  /* Tutur Lime */
+  --lime-500: #94D42F;
+  --lime-700: #5E8A12;  /* lime-deep — text-safe on light */
+
+  /* ---- Periwinkle (community & marketing) ---- */
+  --peri-100: #E4E0FB;
+  --peri-500: #6C5CE7;
+  --peri-600: #5646C9;
+
+  /* ---- System palette · learning content (supporting only) ---- */
+  --teal:   #1A8A8A;  --teal-50:  #E3F2F2;
+  --amber:  #C77A1A;  --amber-50: #FBF0E1;
+  --green:  #1B6E2E;  --green-50: #E5F3E8;
+  --coral:  #C04040;  --coral-50: #FBEAEA;
+
+  /* ---- Neutrals (Brand Book names mapped onto a scale) ---- */
+  --neutral-0:   #FFFFFF;  /* white */
+  --neutral-25:  #FBFAFF;
+  --neutral-50:  #F6F5FB;  /* cloud */
+  --neutral-100: #EFEDF7;
+  --neutral-200: #E6E3F2;  /* line */
+  --neutral-300: #CFCADF;
+  --neutral-400: #A8A4BE;
+  --neutral-500: #8B88A8;  /* mist */
+  --neutral-600: #66627F;
+  --neutral-700: #4A4768;  /* slate */
+  --neutral-800: #2C2942;
+  --neutral-900: #191628;  /* ink */
+
+  /* ---- Brand-name aliases (use these when referencing the book) ---- */
+  --tutur-violet: var(--violet-500);
+  --lime:  var(--lime-400);
+  --peri:  var(--peri-500);
+  --ink:   var(--neutral-900);
+  --slate: var(--neutral-700);
+  --mist:  var(--neutral-500);
+  --cloud: var(--neutral-50);
+  --line:  var(--neutral-200);
+
+  /* ============================================================
+     Semantic aliases — reference these in product & components
+     ============================================================ */
+  /* Brand */
+  --color-brand:            var(--violet-500);
+  --color-brand-hover:      var(--violet-600);
+  --color-brand-active:     var(--violet-700);
+  --color-brand-subtle:     var(--violet-50);
+  --color-brand-subtle-2:   var(--violet-100);
+  --color-on-brand:         var(--neutral-0);
+
+  /* Accent (lime — light, so pairs with dark ink text) */
+  --color-accent:           var(--lime-400);
+  --color-accent-hover:     var(--lime-500);
+  --color-accent-subtle:    var(--lime-50);
+  --color-accent-text:      var(--lime-700);   /* text-safe lime on light */
+  --color-on-accent:        var(--violet-900); /* dark text on lime fills */
+
+  /* Community */
+  --color-community:        var(--peri-500);
+  --color-community-subtle: var(--peri-100);
+
+  /* Text */
+  --text-strong:   var(--neutral-900);  /* ink */
+  --text-body:     var(--neutral-700);  /* slate */
+  --text-muted:    var(--neutral-500);  /* mist */
+  --text-faint:    var(--neutral-400);
+  --text-on-brand: var(--neutral-0);
+  --text-link:     var(--violet-500);
+
+  /* Surfaces */
+  --surface-app:      var(--neutral-25);
+  --surface-card:     var(--neutral-0);
+  --surface-sunken:   var(--neutral-50);  /* cloud */
+  --surface-raised:   var(--neutral-0);
+  --surface-inverse:  var(--neutral-900);
+
+  /* Borders / dividers */
+  --border-subtle:  var(--neutral-200);  /* line */
+  --border-default: var(--neutral-300);
+  --border-strong:  var(--neutral-400);
+  --border-brand:   var(--violet-300);
+
+  /* Status (learning-content palette) */
+  --color-success:        var(--green);
+  --color-success-subtle: var(--green-50);
+  --color-warning:        var(--amber);
+  --color-warning-subtle: var(--amber-50);
+  --color-danger:         var(--coral);
+  --color-danger-subtle:  var(--coral-50);
+  --color-info:           var(--teal);
+  --color-info-subtle:    var(--teal-50);
+
+  /* Focus ring */
+  --color-focus: var(--violet-400);
+
+  /* Signature gradients (Brand Book: #8B5CFF → #5215C9) */
+  --gradient-brand:  linear-gradient(135deg, var(--violet-400) 0%, var(--violet-600) 100%);
+  --gradient-symbol: linear-gradient(135deg, var(--violet-400) 0%, var(--violet-600) 100%);
+  --gradient-calm:   linear-gradient(160deg, var(--violet-50) 0%, var(--peri-100) 100%);
+}
