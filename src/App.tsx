@@ -5,17 +5,19 @@ import {
   deleteAccount,
   ensureProfile,
   isAccountDeleted,
+  loadMaintenance,
   loadOnboarding,
+  recordLoginDay,
   saveOnboarding,
   saveProfile,
 } from "@/lib/db"
+import { MAINTENANCE } from "@/lib/config"
 import {
   loadProgress,
   saveProgress,
   clearProgress,
   isResumableView,
 } from "@/lib/onboardingProgress"
-import { recordLoginDay } from "@/lib/progress"
 import Intro from "@/components/Intro"
 import Auth from "@/components/Auth"
 import Welcome, { clearWelcomeProgress } from "@/components/Welcome"
@@ -27,6 +29,7 @@ import GoalSelection from "@/components/GoalSelection"
 import RoutineSelection from "@/components/RoutineSelection"
 import ActivitySelection from "@/components/ActivitySelection"
 import DashboardHub from "@/components/DashboardHub"
+import AccountDeleted from "@/components/AccountDeleted"
 import type { Profile } from "@/lib/types"
 
 // Build the profile from the 20 profiling answers. Index mapping (see Chat.tsx):
@@ -88,12 +91,39 @@ function readInviteCodeFromUrl(): string | null {
   }
 }
 
+/** Whether a Google/OAuth sign-in bounced back with an error in the URL. */
+function readOAuthError(): boolean {
+  try {
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""))
+    const search = new URLSearchParams(window.location.search)
+    return !!(
+      hash.get("error_description") ||
+      hash.get("error") ||
+      search.get("error_description") ||
+      search.get("error")
+    )
+  } catch {
+    return false
+  }
+}
+
 export default function App() {
   const [view, setView] = useState<View>("intro")
 
   // Invite code captured from a shared link (?code=…) — routes a co-parent to
   // the Join screen once they're authenticated.
   const [pendingCode] = useState<string | null>(readInviteCodeFromUrl)
+
+  // A Google sign-in that bounced back with an error (captured from the URL).
+  const [oauthError] = useState<boolean>(readOAuthError)
+
+  // Runtime maintenance flag (admin-toggled) — OR'd with the build-time env flag.
+  const [remoteMaintenance, setRemoteMaintenance] = useState(false)
+  const maintenance = MAINTENANCE || remoteMaintenance
+
+  // Terminal state after a guardian deletes their account — a bare full-screen
+  // farewell (no nav, no button) shown over everything.
+  const [accountDeleted, setAccountDeleted] = useState(false)
 
   // Raw answers from the 16 profiling questions, handed to the scoring engine.
   const [profilingAnswers, setProfilingAnswers] = useState<string[]>([])
@@ -146,6 +176,7 @@ export default function App() {
         return
       }
       await ensureProfile() // guarantee the profile row exists before anything
+      recordLoginDay() // count today toward this user's login-day progress
       const ob = await loadOnboarding()
       if (cancelled) return
 
@@ -192,9 +223,11 @@ export default function App() {
     }
 
     supabase.auth.getSession().then(async ({ data }) => {
+      // Read the runtime maintenance flag before first paint (no flash).
+      const m = await loadMaintenance()
+      if (!cancelled) setRemoteMaintenance(m)
       if (data.session) {
         setUserEmail(data.session.user.email ?? "")
-        recordLoginDay() // count today toward this month's login-day progress
         // A shared invite link → jump straight to the Join screen.
         if (pendingCode) setView("join")
         else await resume()
@@ -205,7 +238,6 @@ export default function App() {
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_IN" && session) {
         setUserEmail(session.user.email ?? "")
-        recordLoginDay()
         if (pendingCode) setView("join")
         else resume()
       } else if (event === "SIGNED_OUT") setView("intro")
@@ -230,6 +262,19 @@ export default function App() {
       /* ignore */
     }
   }, [pendingCode])
+
+  // A Google sign-in that failed (e.g. the account isn't registered) redirects
+  // back to the landing with only a URL error — surface it on the login form.
+  useEffect(() => {
+    if (!oauthError) return
+    setAuthMode("login")
+    setView("auth")
+    try {
+      window.history.replaceState({}, "", window.location.pathname)
+    } catch {
+      /* ignore */
+    }
+  }, [oauthError])
 
   // Mirror onboarding progress to localStorage so an accidental refresh resumes
   // on the same screen. Only post-auth onboarding views are persisted.
@@ -264,6 +309,9 @@ export default function App() {
       </div>
     )
   }
+
+  // Terminal farewell — full-screen, over everything, after account deletion.
+  if (accountDeleted) return <AccountDeleted />
 
   // The goal/routine matrices and hub are full-bleed responsive layouts, so they
   // render outside the mobile-width column used by the rest of the onboarding flow.
@@ -325,6 +373,7 @@ export default function App() {
         onUpdateGoal={setGoal}
         onUpdateRoutines={setRoutines}
         onDeleteAccount={deleteAccount}
+        onAccountDeleted={() => setAccountDeleted(true)}
         onSignOut={() => {
           supabase.auth.signOut()
           clearProgress()
@@ -348,6 +397,7 @@ export default function App() {
   if (view === "intro") {
     return (
       <Intro
+        maintenance={maintenance}
         onComplete={() => {
           setAuthMode("signup") // "Start with Tutur" → sign-up form
           setView("auth")
@@ -361,7 +411,12 @@ export default function App() {
   }
   if (view === "auth") {
     return (
-      <Auth initialMode={authMode} onBack={() => setView("intro")} />
+      <Auth
+        initialMode={authMode}
+        maintenance={maintenance}
+        oauthError={oauthError}
+        onBack={() => setView("intro")}
+      />
     )
   }
   // Founding welcome is a full-viewport, responsive layout (not the mobile column).

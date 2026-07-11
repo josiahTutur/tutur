@@ -10,9 +10,7 @@ import {
   Loader2,
   ShieldAlert,
   User,
-  X,
   ChevronRight,
-  ChevronLeft,
   Mail,
   CalendarDays,
   Target,
@@ -200,11 +198,6 @@ function WawasanDashboard({ data }: { data: AdminData }) {
   const w = t.wawasan
   const { profiles, children, completions, feedback } = data
 
-  // "Penjaga Berdaftar" drill-down: browse every guardian and open a profile.
-  const [explorerOpen, setExplorerOpen] = useState(false)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const guardians = useMemo(() => buildGuardianIndex(data), [data])
-
   // Section tabs so each area is one tap away instead of a long scroll.
   const [tab, setTab] = useState<TabId>("adoption")
 
@@ -272,11 +265,6 @@ function WawasanDashboard({ data }: { data: AdminData }) {
             hue={CORAL}
             value={`${metrics.totalGuardians}`}
             label={w.guardians}
-            onClick={
-              metrics.totalGuardians > 0
-                ? () => setExplorerOpen(true)
-                : undefined
-            }
           />
           <StatCard
             icon={CheckCircle2}
@@ -444,18 +432,6 @@ function WawasanDashboard({ data }: { data: AdminData }) {
         )}
       </div>
 
-      {explorerOpen && (
-        <GuardianExplorer
-          guardians={guardians}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-          onBack={() => setSelectedId(null)}
-          onClose={() => {
-            setExplorerOpen(false)
-            setSelectedId(null)
-          }}
-        />
-      )}
     </div>
   )
 }
@@ -464,7 +440,7 @@ function WawasanDashboard({ data }: { data: AdminData }) {
 /*  Guardian explorer — list of all registered guardians + a profile card    */
 /* -------------------------------------------------------------------------- */
 
-interface GuardianEntry {
+export interface GuardianEntry {
   profile: AdminProfileRow
   child?: AdminChildRow
   activityCount: number
@@ -472,113 +448,12 @@ interface GuardianEntry {
   feedbackCount: number
 }
 
-function guardianName(p: AdminProfileRow, fallback: string): string {
+export function guardianName(p: AdminProfileRow, fallback: string): string {
   return p.guardian_name?.trim() || p.email?.trim() || fallback
 }
 
-function GuardianExplorer({
-  guardians,
-  selectedId,
-  onSelect,
-  onBack,
-  onClose,
-}: {
-  guardians: GuardianEntry[]
-  selectedId: string | null
-  onSelect: (id: string) => void
-  onBack: () => void
-  onClose: () => void
-}) {
-  const t = useT()
-  const w = t.wawasan
-  const selected = guardians.find((g) => g.profile.id === selectedId) ?? null
-
-  return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div
-        onClick={onClose}
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        aria-hidden
-      />
-
-      {/* Panel */}
-      <div
-        role="dialog"
-        aria-modal="true"
-        className="relative flex max-h-[85vh] w-full max-w-md animate-fade-up flex-col overflow-hidden rounded-3xl glass-strong"
-        style={{ animationFillMode: "both" }}
-      >
-        {/* Header */}
-        <div className="flex items-center gap-2 border-b border-border/60 px-4 py-3.5">
-          {selected ? (
-            <button
-              type="button"
-              onClick={onBack}
-              aria-label={t.common.back}
-              className="flex h-8 w-8 items-center justify-center rounded-xl text-foreground/80 transition-colors hover:bg-foreground/5 hover:text-foreground"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-          ) : (
-            <span
-              className="flex h-8 w-8 items-center justify-center rounded-xl"
-              style={{ background: `hsl(${CORAL} / 0.16)`, color: `hsl(${CORAL})` }}
-            >
-              <Users className="h-4 w-4" />
-            </span>
-          )}
-          <h3 className="min-w-0 flex-1 truncate text-sm font-bold tracking-tight">
-            {selected
-              ? guardianName(selected.profile, w.guardianFallback)
-              : `${w.guardiansTitle} (${guardians.length})`}
-          </h3>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t.common.close}
-            className="flex h-8 w-8 items-center justify-center rounded-xl text-foreground/80 transition-colors hover:bg-foreground/5 hover:text-foreground"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          {selected ? (
-            <GuardianDetail entry={selected} />
-          ) : (
-            <div className="space-y-2">
-              {guardians.map((g) => (
-                <button
-                  key={g.profile.id}
-                  type="button"
-                  onClick={() => onSelect(g.profile.id)}
-                  className="flex w-full items-center gap-3 rounded-2xl border border-foreground/10 p-2.5 text-left transition-all hover:border-foreground/10 hover:bg-foreground/5 active:scale-[0.99]"
-                >
-                  <Avatar name={guardianName(g.profile, w.guardianFallback)} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold font-display">
-                      {guardianName(g.profile, w.guardianFallback)}
-                    </p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {g.profile.relationship?.trim() || w.guardianDefault}
-                      {g.child?.name ? ` · ${w.child}: ${g.child.name}` : ""}
-                    </p>
-                  </div>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
 /** A gradient monogram avatar (initial of the name). */
-function Avatar({ name, large }: { name: string; large?: boolean }) {
+export function Avatar({ name, large }: { name: string; large?: boolean }) {
   const initial = name.trim().charAt(0).toUpperCase() || "?"
   return (
     <div
@@ -603,8 +478,23 @@ function Avatar({ name, large }: { name: string; large?: boolean }) {
   )
 }
 
+/** A small "Deleted" status pill for soft-deleted accounts. */
+export function DeletedBadge({ label }: { label: string }) {
+  return (
+    <span
+      className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+      style={{
+        background: "hsl(var(--destructive) / 0.15)",
+        color: "hsl(var(--destructive))",
+      }}
+    >
+      {label}
+    </span>
+  )
+}
+
 /** Beautiful profile card for one guardian. */
-function GuardianDetail({ entry }: { entry: GuardianEntry }) {
+export function GuardianDetail({ entry }: { entry: GuardianEntry }) {
   const t = useT()
   const { lang } = useLang()
   const w = t.wawasan
@@ -625,13 +515,21 @@ function GuardianDetail({ entry }: { entry: GuardianEntry }) {
         <p className="text-sm text-muted-foreground">
           {p.relationship?.trim() || w.guardianDefault}
         </p>
-        {p.role === "admin" && (
-          <span
-            className="mt-2 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
-            style={{ background: `hsl(${PURPLE} / 0.18)`, color: `hsl(${PURPLE})` }}
-          >
-            {w.admin}
-          </span>
+        {(p.role === "admin" || p.deleted_at) && (
+          <div className="mt-2 flex items-center gap-1.5">
+            {p.role === "admin" && (
+              <span
+                className="rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+                style={{
+                  background: `hsl(${PURPLE} / 0.18)`,
+                  color: `hsl(${PURPLE})`,
+                }}
+              >
+                {w.admin}
+              </span>
+            )}
+            {p.deleted_at && <DeletedBadge label={w.deleted} />}
+          </div>
         )}
       </div>
 
@@ -1167,7 +1065,7 @@ function formatDate(iso: string): string {
 }
 
 /** Join profiles with their child + engagement totals, newest guardian first. */
-function buildGuardianIndex(data: AdminData): GuardianEntry[] {
+export function buildGuardianIndex(data: AdminData): GuardianEntry[] {
   const childByGuardian = new Map<string, AdminChildRow>()
   for (const c of data.children) {
     if (!childByGuardian.has(c.guardian_id)) childByGuardian.set(c.guardian_id, c)

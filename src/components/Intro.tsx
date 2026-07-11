@@ -14,10 +14,13 @@ const GREETING_DURATION = 1000
 export default function Intro({
   onComplete,
   onSkip,
+  maintenance = MAINTENANCE,
 }: {
   onComplete: () => void
   /** Top-right "Log Masuk" — goes straight to the sign-in page. */
   onSkip: () => void
+  /** Runtime maintenance flag (falls back to the build-time env constant). */
+  maintenance?: boolean
 }) {
   const t = useT()
   const { lang, setLang } = useLang()
@@ -49,7 +52,7 @@ export default function Intro({
   // Maintenance mode — keep the violet brand half (desktop/tablet) on the left,
   // and show only the poster + a login entry on the right. Maya, the story
   // particles, greeting and top nav are all hidden.
-  if (MAINTENANCE) {
+  if (maintenance) {
     return (
       <div
         className="flex min-h-screen"

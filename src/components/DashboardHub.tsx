@@ -20,9 +20,14 @@ import {
   Sparkles,
   ChevronRight,
   Trash2,
+  Users,
+  Loader2,
+  Moon,
+  Sun,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useT, useLang, pick, type Lang } from "@/lib/i18n"
+import { useTheme } from "@/lib/theme"
 import type { Profile } from "@/lib/types"
 import {
   ACTIVITIES,
@@ -43,10 +48,12 @@ import {
   insertCompletion,
   updateCompletion,
   loadUserRole,
+  type DeleteAccountResult,
 } from "@/lib/db"
 import AnalysisView from "@/components/AnalysisView"
 import FeedbackView from "@/components/FeedbackView"
 import WawasanView from "@/components/WawasanView"
+import UsersView from "@/components/UsersView"
 import ProfileView from "@/components/ProfileView"
 import SettingsView from "@/components/SettingsView"
 
@@ -91,6 +98,7 @@ type NavId =
   | "analysis"
   | "feedback"
   | "wawasan"
+  | "users"
   | "notification"
   | "setting"
   | "classic"
@@ -110,14 +118,23 @@ const NAV_ITEMS: ReadonlyArray<{
   comingSoon?: boolean
   /** Only shown to signed-in admins (role='admin'). */
   adminOnly?: boolean
+  /** Parent-facing — hidden from admins, who run the system, not the app. */
+  parentOnly?: boolean
 }> = [
-  { id: "aktiviti", label: "Aktiviti Harian", icon: Library },
-  { id: "ai", label: "Panduan AI", icon: BrainCircuit },
-  { id: "aac", label: "Papan", icon: LayoutGrid },
-  { id: "analysis", label: "Analisis", icon: BarChart3, comingSoon: true },
-  { id: "feedback", label: "Maklum Balas", icon: MessageSquare },
-  { id: "setting", label: "Tetapan", icon: Settings },
+  { id: "aktiviti", label: "Aktiviti Harian", icon: Library, parentOnly: true },
+  { id: "ai", label: "Panduan AI", icon: BrainCircuit, parentOnly: true },
+  { id: "aac", label: "Papan", icon: LayoutGrid, parentOnly: true },
+  {
+    id: "analysis",
+    label: "Analisis",
+    icon: BarChart3,
+    comingSoon: true,
+    parentOnly: true,
+  },
+  { id: "feedback", label: "Maklum Balas", icon: MessageSquare, parentOnly: true },
   { id: "wawasan", label: "Wawasan", icon: Sparkles, adminOnly: true },
+  { id: "users", label: "Pengguna", icon: Users, adminOnly: true },
+  { id: "setting", label: "Tetapan", icon: Settings },
 ]
 
 /* -------------------------------------------------------------------------- */
@@ -456,6 +473,7 @@ export default function DashboardHub({
   onUpdateRoutines,
   onSignOut,
   onDeleteAccount,
+  onAccountDeleted,
 }: {
   profile?: Profile
   /** Primary goal code (G1–G10) the parent picked after profiling. */
@@ -472,8 +490,10 @@ export default function DashboardHub({
   onUpdateRoutines?: (routines: string[]) => void
   /** Clears the session and returns to the start of the flow. */
   onSignOut?: () => void
-  /** Deletes the account in the backend (resolves true on success). */
-  onDeleteAccount?: () => Promise<boolean>
+  /** Deletes the account in the backend (resolves with the outcome + reason). */
+  onDeleteAccount?: () => Promise<DeleteAccountResult>
+  /** Called after a successful deletion — App shows the full-screen farewell. */
+  onAccountDeleted?: () => void
 }) {
   const t = useT()
   const { lang } = useLang()
@@ -481,10 +501,17 @@ export default function DashboardHub({
   const [activeNav, setActiveNav] = useState<NavId>("aktiviti")
   const [menuOpen, setMenuOpen] = useState(false) // mobile drawer
   const [isAdmin, setIsAdmin] = useState(false) // gates the Wawasan dashboard
+  const [roleLoaded, setRoleLoaded] = useState(false) // avoid a parent-view flash
 
-  // Resolve the signed-in user's role so only admins see the Wawasan nav/view.
+  // Resolve the signed-in user's role. Admins get the admin cockpit and land on
+  // Wawasan (the dashboard) instead of the parent's Aktiviti Harian.
   useEffect(() => {
-    loadUserRole().then((role) => setIsAdmin(role === "admin"))
+    loadUserRole().then((role) => {
+      const admin = role === "admin"
+      setIsAdmin(admin)
+      if (admin) setActiveNav("wawasan")
+      setRoleLoaded(true)
+    })
   }, [])
 
   // Completed activities → reflection + time, the single source of truth shared
@@ -553,6 +580,16 @@ export default function DashboardHub({
       isAdmin={isAdmin}
     />
   )
+
+  // Wait for the role before rendering anything, so an admin never flashes the
+  // parent view (and vice-versa).
+  if (!roleLoaded) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-screen w-full overflow-hidden">
@@ -659,6 +696,7 @@ export default function DashboardHub({
 
           <ViewLayer visible={activeNav === "setting"}>
             <SettingsView
+              isAdmin={isAdmin}
               stage={profile?.stage}
               profiledAt={profile?.profiledAt}
               onStageChange={updateStage}
@@ -675,12 +713,19 @@ export default function DashboardHub({
             </ViewLayer>
           )}
 
+          {isAdmin && (
+            <ViewLayer visible={activeNav === "users"}>
+              <UsersView />
+            </ViewLayer>
+          )}
+
           <ViewLayer visible={activeNav === "profile"}>
             <ProfileView
               profile={profile}
               onSave={updateProfile}
               onSignOut={() => onSignOut?.()}
               onDeleteAccount={onDeleteAccount}
+              onAccountDeleted={onAccountDeleted}
             />
           </ViewLayer>
         </div>
@@ -741,10 +786,15 @@ function NavRail({
   isAdmin: boolean
 }) {
   const t = useT()
+  const { theme, setTheme } = useTheme()
   const activitiesActive = activeNav === "classic"
   const profileActive = activeNav === "profile"
   const notificationActive = activeNav === "notification"
-  const navItems = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin)
+  const navItems = NAV_ITEMS.filter((item) => {
+    if (item.adminOnly) return isAdmin // Wawasan / Users — admins only
+    if (item.parentOnly) return !isAdmin // parent tools — hidden from admins
+    return true // shared (Tetapan)
+  })
   return (
     <div className="flex h-full flex-col px-4 py-5">
       {/* Logo */}
@@ -798,9 +848,26 @@ function NavRail({
             </button>
           )
         })}
+
+        {/* Light / dark theme toggle — right after the nav items (Tetapan) */}
+        <button
+          type="button"
+          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          className="flex w-full items-center gap-3 rounded-2xl px-3.5 py-3 text-sm font-medium text-foreground/70 transition-all hover:bg-foreground/5 hover:text-foreground"
+        >
+          {theme === "dark" ? (
+            <Sun className="h-5 w-5 shrink-0" />
+          ) : (
+            <Moon className="h-5 w-5 shrink-0" />
+          )}
+          <span className="flex-1 text-left">
+            {theme === "dark" ? t.settings.themeLight : t.settings.themeDark}
+          </span>
+        </button>
       </nav>
 
-      {/* Your Activities — opens the Papan Pemuka Klasik dashboard */}
+      {/* Your Activities — opens the Papan Pemuka Klasik dashboard (parents only) */}
+      {!isAdmin && (
       <button
         type="button"
         onClick={() => onSelect("classic")}
@@ -826,6 +893,7 @@ function NavRail({
         />
         {t.nav.library}
       </button>
+      )}
 
       {/* User profile — opens the editable profile page, with a notification
           bell pinned to the right of the same row. */}

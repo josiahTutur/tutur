@@ -2,14 +2,10 @@
 --  Tutur — account deletion (v5)
 --
 --  Run once in Supabase → SQL Editor (or `supabase db push`).
---  Adds soft-delete support: a deleted account is MARKED (deleted_at) rather
---  than dropped, and the app scrubs personal fields (names, email, ages) at the
---  same time. This keeps de-identified research data (activity_completions,
---  feedback) intact while erasing the parent's & child's identifying details.
---
---  A full erasure of the auth.users row (true "right to be forgotten") requires
---  the service_role and is done from an Edge Function — see notes in the app's
---  db.ts / deleteAccount(). This migration only covers the client-side path.
+--  Adds soft-delete support: a deleted account is MARKED with a `deleted_at`
+--  timestamp rather than dropped. ALL data is retained (names, email, child,
+--  completions, feedback) — the account is simply hidden and the app's boot
+--  guard stops the user from logging back in. Nothing is erased or anonymised.
 -- ============================================================================
 
 alter table public.profiles

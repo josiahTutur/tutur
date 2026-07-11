@@ -6,6 +6,8 @@ import {
   acceptChildInvite,
   loadActiveInvite,
   loadCoGuardians,
+  loadMaintenance,
+  setMaintenance,
   type CoGuardian,
 } from "@/lib/db"
 import { useLang, useT, pick } from "@/lib/i18n"
@@ -27,18 +29,18 @@ import {
   Check,
   Clock,
   Copy,
+  Eye,
+  EyeOff,
   Globe,
   Lock,
-  Moon,
   Share2,
   Sparkles,
-  Sun,
   Target,
   Users,
   Volume2,
+  Wrench,
   X,
 } from "lucide-react"
-import { useTheme } from "@/lib/theme"
 
 /** Ordered routine list (R1–R10) shared with the onboarding routine picker. */
 const ROUTINE_ENTRIES = Object.entries(ROUTINE_LABELS)
@@ -145,12 +147,27 @@ const STR = {
     passwordTitle: "Kata Laluan",
     passwordDesc:
       "Tetapkan kata laluan untuk log masuk dengan lebih cepat, tanpa perlu menunggu pautan e-mel.",
-    passwordPlaceholder: "Kata laluan baharu (sekurang-kurangnya 6 aksara)",
+    passwordPlaceholder: "Kata laluan baharu",
     passwordSaving: "Menyimpan…",
     passwordSet: "Tetapkan Kata Laluan",
-    pwTooShort: "Kata laluan mesti sekurang-kurangnya 6 aksara.",
     pwFailed: "Gagal menetapkan kata laluan. Sila cuba lagi.",
     pwSuccess: "Kata laluan berjaya ditetapkan! 🎉",
+    pwTooWeak: "Kata laluan belum memenuhi semua syarat di bawah.",
+    pwRuleLen: "Sekurang-kurangnya 8 aksara",
+    pwRuleUpper: "Satu huruf besar (A–Z)",
+    pwRuleLower: "Satu huruf kecil (a–z)",
+    pwRuleNumber: "Satu nombor (0–9)",
+    pwRuleSpecial: "Satu simbol (cth. ! @ # $)",
+    pwShow: "Tunjuk kata laluan",
+    pwHide: "Sembunyikan kata laluan",
+    confirmPlaceholder: "Sahkan kata laluan",
+    pwMismatch: "Kata laluan tidak sepadan.",
+    // Maintenance (admin only)
+    maintenanceTitle: "Mod Penyelenggaraan",
+    maintenanceDesc:
+      "Apabila dihidupkan, pendaftaran baharu dijeda dan pelawat baharu melihat poster penyelenggaraan. Pengguna sedia ada masih boleh log masuk.",
+    maintenanceLabel: "Jeda pendaftaran baharu",
+    maintenanceHint: "Perubahan berkuat kuasa untuk pelawat baharu.",
     // Share with partner (co-parent)
     shareTitle: "Kongsi dengan Pasangan",
     shareDesc:
@@ -235,12 +252,27 @@ const STR = {
     passwordTitle: "Password",
     passwordDesc:
       "Set a password to log in faster, without waiting for an email link.",
-    passwordPlaceholder: "New password (at least 6 characters)",
+    passwordPlaceholder: "New password",
     passwordSaving: "Saving…",
     passwordSet: "Set Password",
-    pwTooShort: "Password must be at least 6 characters.",
     pwFailed: "Couldn't set the password. Please try again.",
     pwSuccess: "Password set successfully! 🎉",
+    pwTooWeak: "Password doesn't meet all the requirements below yet.",
+    pwRuleLen: "At least 8 characters",
+    pwRuleUpper: "One uppercase letter (A–Z)",
+    pwRuleLower: "One lowercase letter (a–z)",
+    pwRuleNumber: "One number (0–9)",
+    pwRuleSpecial: "One special character (e.g. ! @ # $)",
+    pwShow: "Show password",
+    pwHide: "Hide password",
+    confirmPlaceholder: "Confirm password",
+    pwMismatch: "Passwords don't match.",
+    // Maintenance (admin only)
+    maintenanceTitle: "Maintenance Mode",
+    maintenanceDesc:
+      "When on, new sign-ups are paused and new visitors see the maintenance poster. Existing users can still log in.",
+    maintenanceLabel: "Pause new sign-ups",
+    maintenanceHint: "Takes effect for new visitors.",
     // Share with partner (co-parent)
     shareTitle: "Share with Partner",
     shareDesc:
@@ -291,7 +323,22 @@ const STR = {
   },
 } as const
 
+/** Password policy: 8+ chars, an uppercase letter, a number, a special char. */
+function passwordChecks(p: string) {
+  return {
+    len: p.length >= 8,
+    upper: /[A-Z]/.test(p),
+    lower: /[a-z]/.test(p),
+    number: /\d/.test(p),
+    special: /[^A-Za-z0-9]/.test(p),
+  }
+}
+function passwordValid(p: string): boolean {
+  return Object.values(passwordChecks(p)).every(Boolean)
+}
+
 export default function SettingsView({
+  isAdmin = false,
   stage = 1,
   profiledAt,
   onStageChange,
@@ -300,6 +347,8 @@ export default function SettingsView({
   routines = [],
   onRoutinesChange,
 }: {
+  /** Admins get a trimmed Settings (language / theme / password only). */
+  isAdmin?: boolean
   /** Child's current communication stage (1–5). */
   stage?: number
   /** ISO date the child was profiled at sign-up. */
@@ -321,7 +370,6 @@ export default function SettingsView({
   const [weeklySummary, setWeeklySummary] = useState(true)
   // Language is a global, persisted preference.
   const { lang: language, setLang: setLanguage } = useLang()
-  const { theme, setTheme } = useTheme()
   const t = useT()
   const s = STR[language]
 
@@ -329,9 +377,15 @@ export default function SettingsView({
   const [newPassword, setNewPassword] = useState("")
   const [pwLoading, setPwLoading] = useState(false)
   const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [showPw, setShowPw] = useState(false)
+  const [confirmPassword, setConfirmPassword] = useState("")
   async function handleSetPassword() {
-    if (newPassword.length < 6) {
-      setPwMsg({ ok: false, text: s.pwTooShort })
+    if (!passwordValid(newPassword)) {
+      setPwMsg({ ok: false, text: s.pwTooWeak })
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setPwMsg({ ok: false, text: s.pwMismatch })
       return
     }
     setPwLoading(true)
@@ -343,8 +397,11 @@ export default function SettingsView({
       return
     }
     setNewPassword("")
+    setConfirmPassword("")
     setPwMsg({ ok: true, text: s.pwSuccess })
   }
+  const pwChecks = passwordChecks(newPassword)
+  const pwMatch = confirmPassword.length > 0 && newPassword === confirmPassword
 
   // Share with partner — invite code + co-guardian list.
   const [coGuardians, setCoGuardians] = useState<CoGuardian[]>([])
@@ -369,6 +426,17 @@ export default function SettingsView({
       if (code) setInviteCode(code)
     })
   }, [])
+
+  // Maintenance mode (admin only) — toggled optimistically, reverts on failure.
+  const [maintenanceOn, setMaintenanceOn] = useState(false)
+  useEffect(() => {
+    if (isAdmin) loadMaintenance().then(setMaintenanceOn)
+  }, [isAdmin])
+  async function toggleMaintenance(on: boolean) {
+    setMaintenanceOn(on)
+    const ok = await setMaintenance(on)
+    if (!ok) setMaintenanceOn(!on)
+  }
 
   async function handleGenerateInvite() {
     setGenLoading(true)
@@ -499,6 +567,24 @@ export default function SettingsView({
     <>
     <div className="h-full overflow-y-auto px-4 pb-28 pt-5 md:px-8 md:pt-6">
       <div className="mx-auto max-w-2xl space-y-6">
+        {/* Maintenance mode — admin only */}
+        {isAdmin && (
+          <Section icon={Wrench} title={s.maintenanceTitle}>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              {s.maintenanceDesc}
+            </p>
+            <ToggleRow
+              label={s.maintenanceLabel}
+              description={s.maintenanceHint}
+              checked={maintenanceOn}
+              onChange={toggleMaintenance}
+            />
+          </Section>
+        )}
+
+        {/* Parent-only settings — hidden for admins, who run the system */}
+        {!isAdmin && (
+          <>
         {/* Communication stage — read-only summary, changed via a confirmed dialog */}
         <Section icon={Sparkles} title={s.stageTitle}>
           <p className="text-xs leading-relaxed text-muted-foreground">
@@ -705,6 +791,8 @@ export default function SettingsView({
             onChange={setWeeklySummary}
           />
         </Section>
+          </>
+        )}
 
         {/* Language */}
         <Section icon={Globe} title={t.settings.languageTitle}>
@@ -747,50 +835,8 @@ export default function SettingsView({
           </div>
         </Section>
 
-        {/* Theme — light / dark */}
-        <Section icon={theme === "dark" ? Moon : Sun} title={t.settings.themeTitle}>
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            {t.settings.themeDesc}
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              { id: "light" as const, label: t.settings.themeLight, icon: Sun },
-              { id: "dark" as const, label: t.settings.themeDark, icon: Moon },
-            ].map((opt) => {
-              const active = theme === opt.id
-              const Icon = opt.icon
-              return (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => setTheme(opt.id)}
-                  aria-pressed={active}
-                  className={cn(
-                    "relative flex items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold transition-all",
-                    active
-                      ? "bg-[hsl(259_80%_55%/0.10)] text-foreground"
-                      : "border-foreground/10 text-foreground/70 hover:border-foreground/30 hover:bg-foreground/5 hover:text-foreground dark:border-white/10"
-                  )}
-                  style={
-                    active
-                      ? {
-                          borderColor: `hsl(${CORAL} / 0.7)`,
-                          boxShadow: `inset 0 0 0 1px hsl(${CORAL} / 0.4)`,
-                          color: `hsl(${CORAL})`,
-                        }
-                      : undefined
-                  }
-                >
-                  <Icon className="h-4 w-4" />
-                  {opt.label}
-                  {active && <SelectedTick />}
-                </button>
-              )
-            })}
-          </div>
-        </Section>
-
-        {/* AI voice for the daily-activity Papan AAC */}
+        {/* AI voice for the daily-activity Papan AAC (parents only) */}
+        {!isAdmin && (
         <Section icon={Volume2} title={s.voiceTitle}>
           <p className="text-xs leading-relaxed text-muted-foreground">
             {s.voiceDesc}
@@ -835,21 +881,95 @@ export default function SettingsView({
             })}
           </div>
         </Section>
+        )}
 
         {/* Account password — set one to log in without an email link */}
         <Section icon={Lock} title={s.passwordTitle}>
           <p className="text-xs leading-relaxed text-muted-foreground">
             {s.passwordDesc}
           </p>
+          {/* Password input with show/hide */}
+          <div className="relative">
+            <input
+              type={showPw ? "text" : "password"}
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(e) => {
+                setNewPassword(e.target.value)
+                setPwMsg(null)
+              }}
+              placeholder={s.passwordPlaceholder}
+              className="w-full rounded-2xl bg-[hsl(259_80%_55%/0.10)] px-4 py-3 pr-11 text-sm text-foreground placeholder:text-muted-foreground/80 outline-none focus:ring-2 focus:ring-ring"
+              style={{ boxShadow: `inset 0 0 0 1px hsl(${TEAL} / 0.3)` }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPw((v) => !v)}
+              aria-label={showPw ? s.pwHide : s.pwShow}
+              className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+
+          {/* Live requirements checklist */}
+          <ul className="space-y-1.5">
+            {[
+              { ok: pwChecks.len, label: s.pwRuleLen },
+              { ok: pwChecks.upper, label: s.pwRuleUpper },
+              { ok: pwChecks.lower, label: s.pwRuleLower },
+              { ok: pwChecks.number, label: s.pwRuleNumber },
+              { ok: pwChecks.special, label: s.pwRuleSpecial },
+            ].map((r) => (
+              <li key={r.label} className="flex items-center gap-2 text-xs">
+                <span
+                  className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full"
+                  style={{
+                    background: r.ok
+                      ? `hsl(${TEAL} / 0.18)`
+                      : "hsl(var(--foreground) / 0.08)",
+                  }}
+                >
+                  {r.ok && (
+                    <Check
+                      className="h-2.5 w-2.5"
+                      strokeWidth={3}
+                      style={{ color: `hsl(${TEAL})` }}
+                    />
+                  )}
+                </span>
+                <span
+                  style={{
+                    color: r.ok
+                      ? `hsl(${TEAL})`
+                      : "hsl(var(--muted-foreground))",
+                  }}
+                >
+                  {r.label}
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          {/* Confirm password */}
           <input
-            type="password"
+            type={showPw ? "text" : "password"}
             autoComplete="new-password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            placeholder={s.passwordPlaceholder}
+            value={confirmPassword}
+            onChange={(e) => {
+              setConfirmPassword(e.target.value)
+              setPwMsg(null)
+            }}
+            placeholder={s.confirmPlaceholder}
             className="w-full rounded-2xl bg-[hsl(259_80%_55%/0.10)] px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/80 outline-none focus:ring-2 focus:ring-ring"
             style={{ boxShadow: `inset 0 0 0 1px hsl(${TEAL} / 0.3)` }}
           />
+          {confirmPassword.length > 0 && !pwMatch && (
+            <p className="text-xs font-medium text-destructive">
+              {s.pwMismatch}
+            </p>
+          )}
+
           {pwMsg && (
             <p
               className="text-xs font-medium"
@@ -863,7 +983,7 @@ export default function SettingsView({
           <button
             type="button"
             onClick={handleSetPassword}
-            disabled={pwLoading || newPassword.length < 6}
+            disabled={pwLoading || !passwordValid(newPassword) || !pwMatch}
             className="w-full rounded-2xl py-3 text-sm font-bold text-background transition-all active:scale-[0.99] disabled:opacity-40"
             style={{ background: `hsl(${CORAL})` }}
           >
@@ -871,7 +991,8 @@ export default function SettingsView({
           </button>
         </Section>
 
-        {/* Share with partner — co-parent invite + shared-with list */}
+        {/* Share with partner — co-parent invite + shared-with list (parents only) */}
+        {!isAdmin && (
         <Section icon={Users} title={s.shareTitle}>
           <p className="text-xs leading-relaxed text-muted-foreground">
             {s.shareDesc}
@@ -985,6 +1106,7 @@ export default function SettingsView({
             )}
           </div>
         </Section>
+        )}
       </div>
     </div>
 

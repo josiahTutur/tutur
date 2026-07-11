@@ -23,6 +23,9 @@ const STR = {
     invalidEmail: "Sila masukkan alamat e-mel yang sah.",
     pwTooShort: "Kata laluan mesti sekurang-kurangnya 6 aksara.",
     wrongCredentials: "E-mel atau kata laluan salah. Sila cuba lagi.",
+    loginFailed:
+      "Kami tidak dapat log masuk anda. Jika anda belum mempunyai akaun Tutur, sila daftar.",
+    signUpCta: "Daftar Akaun Baharu",
     alreadyRegistered: "E-mel ini sudah didaftar. Sila log masuk.",
     signUpFailed: "Gagal mendaftar. Sila cuba lagi.",
     magicLinkFailed: "Gagal menghantar pautan. Sila cuba lagi.",
@@ -61,6 +64,9 @@ const STR = {
     invalidEmail: "Please enter a valid email address.",
     pwTooShort: "Password must be at least 6 characters.",
     wrongCredentials: "Incorrect email or password. Please try again.",
+    loginFailed:
+      "We couldn't log you in. If you don't have a Tutur account yet, please sign up.",
+    signUpCta: "Create an Account",
     alreadyRegistered: "This email is already registered. Please log in.",
     signUpFailed: "Sign-up failed. Please try again.",
     magicLinkFailed: "Couldn't send the link. Please try again.",
@@ -112,20 +118,30 @@ type Mode = "login" | "signup"
 export default function Auth({
   onBack,
   initialMode = "login",
+  maintenance = MAINTENANCE,
+  oauthError = false,
 }: {
   onBack?: () => void
   /** Which form to open on first render — "signup" from the CTA, "login" from Sign In. */
   initialMode?: Mode
+  /** Runtime maintenance flag — forces login-only (falls back to env constant). */
+  maintenance?: boolean
+  /** A prior Google sign-in bounced back with an error (e.g. not registered). */
+  oauthError?: boolean
 }) {
   const { lang } = useLang()
   const s = STR[lang]
   // Maintenance pauses new sign-ups — force the login form regardless of entry.
-  const [mode, setMode] = useState<Mode>(MAINTENANCE ? "login" : initialMode)
+  const [mode, setMode] = useState<Mode>(maintenance ? "login" : initialMode)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPw, setShowPw] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(
+    oauthError ? s.loginFailed : null
+  )
+  // When a login attempt fails, surface a "Sign Up" CTA (they may have no account).
+  const [suggestSignup, setSuggestSignup] = useState(oauthError)
   // "check your email" state (signup email confirmation)
   const [confirmSent, setConfirmSent] = useState(false)
 
@@ -152,7 +168,12 @@ export default function Auth({
         password,
       })
       setLoading(false)
-      if (err) setError(s.wrongCredentials)
+      if (err) {
+        // Supabase returns the same error for wrong password OR no such account,
+        // so guide them to sign up as well.
+        setError(s.loginFailed)
+        setSuggestSignup(true)
+      }
       // success → App routes in via onAuthStateChange
     } else {
       const { data, error: err } = await supabase.auth.signUp({
@@ -464,8 +485,28 @@ export default function Auth({
           </button>
         </form>
 
+        {/* Sign-up CTA — shown after a failed login (they may have no account) */}
+        {suggestSignup && mode === "login" && !maintenance && (
+          <button
+            type="button"
+            onClick={() => {
+              setMode("signup")
+              setError(null)
+              setSuggestSignup(false)
+            }}
+            className="mt-3 w-full rounded-[14px] border-[1.5px] py-3 text-sm font-bold transition-transform active:scale-[0.99]"
+            style={{
+              borderColor: "var(--color-brand)",
+              color: "var(--color-brand)",
+              background: "var(--surface-card)",
+            }}
+          >
+            {s.signUpCta}
+          </button>
+        )}
+
         {/* Switch between login / signup — hidden while sign-ups are paused */}
-        {!MAINTENANCE && (
+        {!maintenance && (
           <div className="mt-4 text-center text-sm text-[color:var(--text-body)]">
             {mode === "login" ? s.noAccount : s.hasAccount}
             <button
@@ -473,6 +514,7 @@ export default function Auth({
               onClick={() => {
                 setMode(mode === "login" ? "signup" : "login")
                 setError(null)
+                setSuggestSignup(false)
               }}
               className="font-semibold text-[color:var(--color-brand)] underline-offset-4 hover:underline"
             >

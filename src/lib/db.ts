@@ -202,45 +202,48 @@ export async function saveOnboarding(data: OnboardingData): Promise<void> {
 /* -------------------------------------------------------------------------- */
 /*  Account deletion                                                          */
 /*                                                                            */
-/*  Soft delete: the profile is marked `deleted_at` and every personal detail */
-/*  (guardian + child names, contact, ages) is scrubbed. Behavioural rows     */
-/*  (activity_completions) and feedback are kept, but now de-identified, so    */
-/*  aggregate research stays intact. A true erasure of the auth.users row      */
-/*  needs the service_role (an Edge Function) and can be layered on top later. */
+/*  Soft delete ONLY: the profile is marked with a `deleted_at` timestamp and  */
+/*  nothing else changes — all details (names, email, ages, child, completions,*/
+/*  feedback) are retained. The account is simply hidden: the boot guard        */
+/*  (isAccountDeleted) blocks the user from logging back in.                    */
 /* -------------------------------------------------------------------------- */
 
-/** Soft-delete + anonymise the signed-in user's account. Returns true on
- *  success. No-op (false) if not signed in. */
-export async function deleteAccount(): Promise<boolean> {
+export type DeleteAccountResult =
+  | { ok: true }
+  | {
+      ok: false
+      /** Why the delete didn't happen — drives the message shown to the user. */
+      reason: "not_signed_in" | "admin" | "error"
+      /** Raw DB error (for the "error" reason), surfaced to help diagnose. */
+      message?: string
+    }
+
+/** Mark the signed-in user's account as deleted — a soft-delete flag only.
+ *
+ *  All data is retained; only `deleted_at` is set, which hides the account and
+ *  (via the boot guard) stops the user logging back in. Admin accounts are
+ *  PROTECTED — they're provisioned from the SQL editor and can't self-delete
+ *  here. On failure the raw DB error is returned so the reason is visible. */
+export async function deleteAccount(): Promise<DeleteAccountResult> {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) return false
+  if (!user) return { ok: false, reason: "not_signed_in" }
+
+  // Protect admins — deleting one would also break the analytics dashboard.
+  const role = await loadUserRole()
+  if (role === "admin") return { ok: false, reason: "admin" }
 
   const { error: pErr } = await supabase
     .from("profiles")
-    .update({
-      deleted_at: new Date().toISOString(),
-      guardian_name: null,
-      relationship: null,
-      guardian_age: null,
-      email: null,
-    })
+    .update({ deleted_at: new Date().toISOString() })
     .eq("id", user.id)
   if (pErr) {
-    console.error("[deleteAccount] profile scrub failed:", pErr)
-    return false
+    console.error("[deleteAccount] mark-deleted failed:", pErr)
+    return { ok: false, reason: "error", message: pErr.message }
   }
 
-  // Scrub the child's identifying details too (the stage stays for de-identified
-  // research; it isn't personally identifying on its own).
-  const { error: cErr } = await supabase
-    .from("children")
-    .update({ name: null, age: null })
-    .eq("guardian_id", user.id)
-  if (cErr) console.error("[deleteAccount] child scrub failed:", cErr)
-
-  return true
+  return { ok: true }
 }
 
 /** Whether the signed-in user's account has been soft-deleted. Used on boot to
@@ -256,6 +259,106 @@ export async function isAccountDeleted(): Promise<boolean> {
     .eq("id", user.id)
     .maybeSingle()
   return !!data?.deleted_at
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Login days — per-user engagement (personalized, syncs across devices)     */
+/* -------------------------------------------------------------------------- */
+
+/** Local YYYY-MM-DD (matches how the calendar labels its day cells). */
+function isoDay(d: Date): string {
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  return `${d.getFullYear()}-${m}-${day}`
+}
+
+/** Record today as a login day for the signed-in user (idempotent). */
+export async function recordLoginDay(): Promise<void> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return
+  const { error } = await supabase
+    .from("login_days")
+    .upsert(
+      { guardian_id: user.id, day: isoDay(new Date()) },
+      { onConflict: "guardian_id,day", ignoreDuplicates: true }
+    )
+  if (error) console.error("[recordLoginDay] failed:", error)
+}
+
+/** Distinct login days this month for the signed-in user (floored at 1, since a
+ *  user viewing this is active today). Personalized per account. */
+export async function loginDaysThisMonth(): Promise<number> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return 1
+  const now = new Date()
+  const first = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`
+  const { count, error } = await supabase
+    .from("login_days")
+    .select("*", { count: "exact", head: true })
+    .eq("guardian_id", user.id)
+    .gte("day", first)
+  if (error) {
+    console.error("[loginDaysThisMonth] failed:", error)
+    return 1
+  }
+  return Math.max(1, count ?? 1)
+}
+
+/* -------------------------------------------------------------------------- */
+/*  App settings (maintenance) + admin actions                                */
+/* -------------------------------------------------------------------------- */
+
+/** Whether new sign-ups are paused (runtime flag, toggled by admins). Readable
+ *  by everyone, including signed-out visitors. */
+export async function loadMaintenance(): Promise<boolean> {
+  const { data } = await supabase
+    .from("app_settings")
+    .select("maintenance")
+    .eq("id", 1)
+    .maybeSingle()
+  return !!data?.maintenance
+}
+
+/** Toggle maintenance mode (admin only, enforced by RLS). */
+export async function setMaintenance(on: boolean): Promise<boolean> {
+  const { error } = await supabase
+    .from("app_settings")
+    .update({ maintenance: on, updated_at: new Date().toISOString() })
+    .eq("id", 1)
+  if (error) {
+    console.error("[setMaintenance] failed:", error)
+    return false
+  }
+  return true
+}
+
+/** Reactivate a soft-deleted guardian (admin only, via SECURITY DEFINER RPC). */
+export async function reactivateGuardian(id: string): Promise<boolean> {
+  const { error } = await supabase.rpc("set_guardian_deleted", {
+    gid: id,
+    del: false,
+  })
+  if (error) {
+    console.error("[reactivateGuardian] failed:", error)
+    return false
+  }
+  return true
+}
+
+/** Permanently delete a guardian and all their data (admin only). Irreversible. */
+export async function deleteGuardian(
+  id: string
+): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await supabase.rpc("admin_delete_guardian", { gid: id })
+  if (error) {
+    console.error("[deleteGuardian] failed:", error)
+    return { ok: false, error: error.message }
+  }
+  return { ok: true }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -470,6 +573,8 @@ export interface AdminProfileRow {
   relationship: string | null
   guardian_age: string | null
   role: string
+  /** Set when the guardian soft-deleted their account (null = active). */
+  deleted_at: string | null
 }
 export interface AdminChildRow {
   guardian_id: string
@@ -512,7 +617,7 @@ export async function loadAdminData(): Promise<AdminData | null> {
       supabase
         .from("profiles")
         .select(
-          "id, created_at, guardian_name, email, primary_goal, relationship, guardian_age, role"
+          "id, created_at, guardian_name, email, primary_goal, relationship, guardian_age, role, deleted_at"
         ),
       supabase
         .from("children")

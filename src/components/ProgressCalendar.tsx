@@ -1,12 +1,12 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { cn } from "@/lib/utils"
 import {
   activitiesDoneDaysAgo,
   DAILY_TARGET_ACTIVITIES,
   formatDuration,
-  loginDaysThisMonth,
 } from "@/lib/progress"
-import { Check } from "lucide-react"
+import { loginDaysThisMonth } from "@/lib/db"
+import { Check, ChevronDown } from "lucide-react"
 import { useLang } from "@/lib/i18n"
 
 const STR = {
@@ -33,6 +33,11 @@ const STR = {
     pillNone: "Tiada",
     progressHeading: (monthName: string) => `Kemajuan ${monthName}`,
     dayCounter: (activeDays: number) => `${activeDays} hari aktif`,
+    activeDaysLabel: "Hari Aktif",
+    doneLabel: "Selesai",
+    timeLabel: "Masa",
+    dateFmt: (day: number, month: string, year: number) =>
+      `${day} ${month} ${year}`,
     tapHint: "Ketik hari untuk lihat butiran aktiviti yang selesai.",
     dayAria: (day: number, doneCount: number, target: number) =>
       `Hari ${day}: ${doneCount}/${target} aktiviti`,
@@ -78,6 +83,11 @@ const STR = {
     progressHeading: (monthName: string) => `${monthName} Progress`,
     dayCounter: (activeDays: number) =>
       `${activeDays} active day${activeDays === 1 ? "" : "s"}`,
+    activeDaysLabel: "Active Days",
+    doneLabel: "Done",
+    timeLabel: "Time",
+    dateFmt: (day: number, month: string, year: number) =>
+      `${month} ${day}, ${year}`,
     tapHint: "Tap a day to see the details of completed activities.",
     dayAria: (day: number, doneCount: number, target: number) =>
       `Day ${day}: ${doneCount}/${target} activities`,
@@ -130,6 +140,7 @@ export default function ProgressCalendar({
   todayCompleted,
   todaySeconds,
   samplePast = true,
+  collapsible = false,
 }: {
   /** Live count of activities completed today; overrides the placeholder so
    *  today's cell colour updates as the parent completes activities. */
@@ -140,6 +151,8 @@ export default function ProgressCalendar({
    *  ("Tiada"), never "Terlepas"/"Separa". Used by Aktiviti Harian so the
    *  calendar reflects only what the parent has really done. */
   samplePast?: boolean
+  /** Show a compact summary row that expands to the full calendar on tap. */
+  collapsible?: boolean
 }) {
   const { lang } = useLang()
   const s = STR[lang]
@@ -150,6 +163,15 @@ export default function ProgressCalendar({
   const monthName = s.months[month]
   const daysInMonth = new Date(year, month + 1, 0).getDate()
   const currentDay = now.getDate()
+
+  // Per-user login-day count (fetched from the backend), floored at 1.
+  const [activeDays, setActiveDays] = useState(1)
+  useEffect(() => {
+    loginDaysThisMonth().then(setActiveDays)
+  }, [])
+
+  // Collapsible: start collapsed; always expanded when not collapsible.
+  const [expanded, setExpanded] = useState(!collapsible)
 
   const pillLabel: Record<DayStatus, string> = {
     full: s.pillFull,
@@ -235,22 +257,66 @@ export default function ProgressCalendar({
 
   return (
     <section className="rounded-3xl glass-strong p-5">
-      <div className="mb-1 flex items-center justify-between">
-        <h2 className="text-sm font-semibold tracking-tight">
-          {s.progressHeading(monthName)}
-        </h2>
-        <span
-          className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
-          style={{ background: `hsl(${TEAL} / 0.16)`, color: `hsl(${TEAL})` }}
+      {collapsible ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          className="w-full text-left"
         >
-          {s.dayCounter(loginDaysThisMonth())}
-        </span>
-      </div>
-      <p className="mb-4 text-xs text-muted-foreground">
-        {s.tapHint}
-      </p>
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-sm font-semibold tracking-tight">
+                {s.progressHeading(monthName)}
+              </h2>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {s.dateFmt(currentDay, monthName, year)}
+              </p>
+            </div>
+            <ChevronDown
+              className={cn(
+                "h-5 w-5 shrink-0 text-muted-foreground transition-transform",
+                expanded && "rotate-180"
+              )}
+            />
+          </div>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <SummaryChip
+              value={`${activeDays}`}
+              label={s.activeDaysLabel}
+              hue={CORAL}
+            />
+            <SummaryChip
+              value={`${todayCompleted ?? 0}`}
+              label={s.doneLabel}
+              hue={TEAL}
+            />
+            <SummaryChip
+              value={formatDuration(todaySeconds ?? 0)}
+              label={s.timeLabel}
+              hue={TEAL}
+            />
+          </div>
+        </button>
+      ) : (
+        <div className="mb-1 flex items-center justify-between">
+          <h2 className="text-sm font-semibold tracking-tight">
+            {s.progressHeading(monthName)}
+          </h2>
+          <span
+            className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+            style={{ background: `hsl(${TEAL} / 0.16)`, color: `hsl(${TEAL})` }}
+          >
+            {s.dayCounter(activeDays)}
+          </span>
+        </div>
+      )}
 
-      <div className="grid grid-cols-6 gap-2 sm:grid-cols-10">
+      {expanded && (
+        <div className={collapsible ? "mt-4" : ""}>
+          <p className="mb-4 text-xs text-muted-foreground">{s.tapHint}</p>
+
+          <div className="grid grid-cols-6 gap-2 sm:grid-cols-10">
         {Array.from({ length: daysInMonth }, (_, i) => {
           const day = i + 1
           const { status, doneCount } = infoFor(day)
@@ -357,7 +423,32 @@ export default function ProgressCalendar({
           }}
         />
       </div>
+        </div>
+      )}
     </section>
+  )
+}
+
+/** A compact summary stat shown in the collapsed progress row. */
+function SummaryChip({
+  value,
+  label,
+  hue,
+}: {
+  value: string
+  label: string
+  hue: string
+}) {
+  return (
+    <div className="rounded-xl bg-foreground/[0.05] px-2 py-1.5 text-center">
+      <p
+        className="text-sm font-bold tabular-nums"
+        style={{ color: `hsl(${hue})` }}
+      >
+        {value}
+      </p>
+      <p className="truncate text-[10px] text-muted-foreground">{label}</p>
+    </div>
   )
 }
 

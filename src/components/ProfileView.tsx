@@ -2,11 +2,11 @@ import { useState } from "react"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import type { Profile } from "@/lib/types"
+import { type DeleteAccountResult } from "@/lib/db"
 import { useLang } from "@/lib/i18n"
 import {
   AlertTriangle,
   Check,
-  Heart,
   Loader2,
   LogOut,
   Trash2,
@@ -49,11 +49,9 @@ const STR = {
     deleteConfirm: "Padam Akaun Saya",
     deleting: "Memadam…",
     deleteError: "Gagal memadam akaun. Sila cuba lagi.",
+    adminCannotDelete:
+      "Akaun pentadbir tidak boleh dipadam di sini. Sila hubungi sokongan.",
     cancel: "Batal",
-    byeTitle: "Kami sedih melihat anda pergi 💜",
-    byeBody:
-      "Akaun anda telah dipadam. Terima kasih kerana membenarkan Tutur menjadi sebahagian daripada perjalanan keluarga anda. Pintu kami sentiasa terbuka jika anda ingin kembali. Jaga diri, ya.",
-    byeCta: "Kembali ke Laman Utama",
   },
   en: {
     profileFallback: "Your Profile",
@@ -88,11 +86,9 @@ const STR = {
     deleteConfirm: "Delete My Account",
     deleting: "Deleting…",
     deleteError: "Couldn't delete the account. Please try again.",
+    adminCannotDelete:
+      "Admin accounts can't be deleted here. Please contact support.",
     cancel: "Cancel",
-    byeTitle: "We're sad to see you go 💜",
-    byeBody:
-      "Your account has been deleted. Thank you for letting Tutur be part of your family's journey. Our door is always open if you'd like to come back. Take care of each other.",
-    byeCta: "Back to Home",
   },
 } as const
 
@@ -123,24 +119,26 @@ export default function ProfileView({
   onSave,
   onSignOut,
   onDeleteAccount,
+  onAccountDeleted,
 }: {
   profile?: Profile
   /** Persists the edited profile (stage is carried over untouched). */
   onSave: (profile: Profile) => void
   /** Clears the session and returns to the start of the flow. */
   onSignOut: () => void
-  /** Deletes the account in the backend. Resolves true on success. */
-  onDeleteAccount?: () => Promise<boolean>
+  /** Deletes the account in the backend; resolves with the outcome + reason. */
+  onDeleteAccount?: () => Promise<DeleteAccountResult>
+  /** Called after a successful deletion — App shows the full-screen farewell. */
+  onAccountDeleted?: () => void
 }) {
   const { lang } = useLang()
   const s = STR[lang]
   const [form, setForm] = useState<Profile>(profile ?? EMPTY_PROFILE)
   const [saved, setSaved] = useState(false)
 
-  // Account deletion — gated behind a typed-word confirmation dialog, then a
-  // gentle goodbye screen before the session is cleared.
+  // Account deletion — gated behind a typed-word confirmation dialog; on success
+  // the App shows a full-screen farewell (handled via onAccountDeleted).
   const [deleteOpen, setDeleteOpen] = useState(false)
-  const [deleted, setDeleted] = useState(false)
 
   function set<K extends keyof Profile>(key: K, value: Profile[K]) {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -150,38 +148,6 @@ export default function ProfileView({
   function handleSave() {
     onSave(form)
     setSaved(true)
-  }
-
-  // Goodbye screen — shown after a successful deletion; the CTA clears the
-  // session and returns to the start.
-  if (deleted) {
-    return (
-      <div className="flex h-full items-center justify-center px-6">
-        <div
-          className="mx-auto max-w-sm animate-fade-up text-center"
-          style={{ animationFillMode: "both" }}
-        >
-          <div
-            className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl"
-            style={{ background: `hsl(${CORAL} / 0.14)` }}
-          >
-            <Heart className="h-8 w-8" style={{ color: `hsl(${CORAL})` }} />
-          </div>
-          <h2 className="text-xl font-bold tracking-tight">{s.byeTitle}</h2>
-          <p className="mx-auto mt-3 text-sm leading-relaxed text-muted-foreground">
-            {s.byeBody}
-          </p>
-          <button
-            type="button"
-            onClick={onSignOut}
-            className="mt-7 w-full rounded-2xl py-3.5 text-sm font-semibold text-background transition-all active:scale-[0.99]"
-            style={{ background: `hsl(${CORAL})` }}
-          >
-            {s.byeCta}
-          </button>
-        </div>
-      </div>
-    )
   }
 
   return (
@@ -332,7 +298,7 @@ export default function ProfileView({
         onDelete={onDeleteAccount}
         onDeleted={() => {
           setDeleteOpen(false)
-          setDeleted(true)
+          onAccountDeleted?.()
         }}
         onCancel={() => setDeleteOpen(false)}
       />
@@ -355,26 +321,31 @@ function DeleteAccountDialog({
   onCancel,
 }: {
   s: (typeof STR)[keyof typeof STR]
-  onDelete: () => Promise<boolean>
+  onDelete: () => Promise<DeleteAccountResult>
   onDeleted: () => void
   onCancel: () => void
 }) {
   const [text, setText] = useState("")
   const [deleting, setDeleting] = useState(false)
-  const [error, setError] = useState(false)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   const matches = text.trim().toUpperCase() === s.deleteWord
 
   async function confirm() {
     if (!matches || deleting) return
     setDeleting(true)
-    setError(false)
-    const ok = await onDelete()
-    if (ok) {
+    setErrorMsg(null)
+    const res = await onDelete()
+    if (res.ok) {
       onDeleted()
     } else {
       setDeleting(false)
-      setError(true)
+      // Admin → a clear reason; otherwise surface the real DB error.
+      setErrorMsg(
+        res.reason === "admin"
+          ? s.adminCannotDelete
+          : res.message || s.deleteError
+      )
     }
   }
 
@@ -435,9 +406,9 @@ function DeleteAccountDialog({
           className="mt-2 glass"
         />
 
-        {error && (
+        {errorMsg && (
           <p className="mt-2 text-xs font-medium text-destructive">
-            {s.deleteError}
+            {errorMsg}
           </p>
         )}
 

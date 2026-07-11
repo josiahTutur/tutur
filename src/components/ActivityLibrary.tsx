@@ -321,6 +321,7 @@ export default function ActivityLibrary({
             todayCompleted={completedCount}
             todaySeconds={todaySeconds}
             samplePast={false}
+            collapsible
           />
 
           <p className="text-sm text-muted-foreground">
