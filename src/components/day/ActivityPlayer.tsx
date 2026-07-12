@@ -29,14 +29,69 @@ import {
   type Interest,
   type ScriptLine,
 } from "@/lib/dayConfig"
+import { useLang } from "@/lib/i18n"
 import { interpolate, type Vars } from "@/lib/interpolate"
 import { cn } from "@/lib/utils"
 
-const PHASE_LABELS: Record<string, string> = {
-  persediaan: "Persediaan",
-  semasa: "Semasa",
-  selesai: "Selesai",
+const STR = {
+  ms: {
+    phases: { persediaan: "Persediaan", semasa: "Semasa", selesai: "Selesai" },
+    markMoment: "Tandai momen",
+    ifChildDoes: (n: string) => `Jika ${n} buat lain?`,
+    ccsCta: (n: string) => `Tahap CCS — cara cakap ikut tahap ${n}`,
+    next: "Seterusnya",
+    finish: "Selesai — jawab soalan ringkas",
+    waitSignal: "Tunggu isyarat…",
+    giveNow: "Bila dia beri isyarat — bagi SEGERA, dalam 2 saat.",
+    hold: "Tahan… jangan bagi dulu",
+    ready: "Bersedia…",
+    drawerTitle: "Jika anak buat lain…",
+    close: "Tutup",
+    ccsTitle: "Tahap CCS",
+    ccsWhat: "Apa itu CCS?",
+    ccsSub: "Cakap ikut tahap anak — bukan tahap yang kita harapkan.",
+    ccsLead: "CCS = tahap komunikasi anak.",
+    ccsBody: " Ia bukan markah, dan bukan ujian. Ia cuma menunjukkan cara anak berkomunikasi sekarang — supaya anda boleh sesuaikan cara anda bercakap dengannya.",
+    ccsBullets: [
+      "· CCS rendah — anda banyak naratif, anak memerhati",
+      "· CCS naik — anda tunggu, anak mula beri isyarat",
+      "· CCS tinggi — anak mula pimpin, anda kembangkan",
+    ],
+    ccsFoot: "Tiada CCS “baik” atau “teruk”. Penanda aras anda ialah anak anda sendiri pada Hari 1.",
+  },
+  en: {
+    phases: { persediaan: "Setting up", semasa: "During play", selesai: "Wrapping up" },
+    markMoment: "Mark a moment",
+    ifChildDoes: (n: string) => `What if ${n} does something else?`,
+    ccsCta: (n: string) => `CCS level — how to speak at ${n}'s level`,
+    next: "Next",
+    finish: "Done — a few quick questions",
+    waitSignal: "Wait for their signal…",
+    giveNow: "The moment they signal — give it IMMEDIATELY, within 2 seconds.",
+    hold: "Hold… don't give it yet",
+    ready: "Get ready…",
+    drawerTitle: "If your child does something else…",
+    close: "Close",
+    ccsTitle: "CCS level",
+    ccsWhat: "What is CCS?",
+    ccsSub: "Speak at your child's level — not the level we hope for.",
+    ccsLead: "CCS = your child's communication level.",
+    ccsBody: " It is not a score, and not a test. It simply shows how your child communicates right now — so you can adjust the way you speak with them.",
+    ccsBullets: [
+      "· Lower CCS — you narrate more, your child observes",
+      "· CCS rising — you wait, your child starts to signal",
+      "· Higher CCS — your child begins to lead, you expand",
+    ],
+    ccsFoot: "There is no “good” or “bad” CCS. Your benchmark is your own child on Day 1.",
+  },
 }
+
+/**
+ * MS is the canonical shape — add a key there and EN fails to compile until it's
+ * translated too. A missing translation should be a build error, not a Malay
+ * sentence appearing on an English screen.
+ */
+type Copy = (typeof STR)["ms"]
 
 /** Timers auto-start shortly after the card lands, so the parent isn't racing it. */
 const TIMER_START_DELAY_MS = 1000
@@ -93,6 +148,8 @@ export function ActivityPlayer({
   /** Where §6.1 event logging will hang. No-op in the skeleton. */
   onEvent?: (e: ActivityEvent) => void
 }) {
+  const { lang } = useLang()
+  const t = STR[lang]
   const steps = useMemo(() => buildSteps(day, interest), [day, interest])
   const [i, setI] = useState(0)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -133,13 +190,13 @@ export function ActivityPlayer({
       {/* Top bar — phase chip + quit */}
       <header className="flex items-center justify-between gap-3 px-5 py-4">
         <span className="rounded-full bg-primary/10 px-3 py-1 font-display text-xs font-semibold text-primary">
-          {PHASE_LABELS[step.phase]} · {step.phaseIndex}/{step.phaseCount}
+          {t.phases[step.phase]} · {step.phaseIndex}/{step.phaseCount}
         </span>
         <button
           type="button"
           onClick={onQuit}
           className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          aria-label="Tutup aktiviti"
+          aria-label="Close activity"
         >
           <X className="size-5" />
         </button>
@@ -159,6 +216,7 @@ export function ActivityPlayer({
           key={i}
           line={step.line}
           say={say}
+          t={t}
           onTimerDone={(requested, actual) =>
             emit("timer_completed", {
               day: day.day_number,
@@ -184,7 +242,7 @@ export function ActivityPlayer({
           }}
         >
           <Star className={cn("size-4", moments > 0 && "fill-current text-neon-cyan")} />
-          Tandai momen{moments > 0 ? ` (${moments})` : ""}
+          {t.markMoment}{moments > 0 ? ` (${moments})` : ""}
         </Button>
         <Button
           variant="outline"
@@ -196,7 +254,7 @@ export function ActivityPlayer({
           }}
         >
           <HelpCircle className="size-4" />
-          Jika {vars.anak} buat lain?
+          {t.ifChildDoes(vars.anak)}
         </Button>
       </div>
 
@@ -214,7 +272,7 @@ export function ActivityPlayer({
           }}
         >
           <Layers className="size-4" />
-          Tahap CCS — cara cakap ikut tahap {vars.anak}
+          {t.ccsCta(vars.anak)}
         </Button>
       </div>
 
@@ -225,20 +283,20 @@ export function ActivityPlayer({
           size="icon"
           disabled={i === 0}
           onClick={() => setI((n) => Math.max(0, n - 1))}
-          aria-label="Kad sebelum"
+          aria-label="Previous card"
         >
           <ArrowLeft className="size-5" />
         </Button>
         <Button className="flex-1" size="lg" onClick={advance}>
-          {isLast ? "Selesai — jawab soalan ringkas" : "Seterusnya"}
+          {isLast ? t.finish : t.next}
           {!isLast && <ArrowRight className="size-4" />}
         </Button>
       </footer>
 
       {drawerOpen && (
-        <SituationDrawer day={day} say={say} onClose={() => setDrawerOpen(false)} />
+        <SituationDrawer day={day} say={say} t={t} onClose={() => setDrawerOpen(false)} />
       )}
-      {ccsOpen && <CcsDrawer day={day} say={say} onClose={() => setCcsOpen(false)} />}
+      {ccsOpen && <CcsDrawer day={day} say={say} t={t} onClose={() => setCcsOpen(false)} />}
     </div>
   )
 }
@@ -252,11 +310,13 @@ export function ActivityPlayer({
 function LineCard({
   line,
   say,
+  t,
   onTimerStart,
   onTimerDone,
 }: {
   line: ScriptLine
   say: (s: string) => string
+  t: Copy
   onTimerStart: (requested: number) => void
   onTimerDone: (requested: number, actual: number) => void
 }) {
@@ -325,10 +385,10 @@ function LineCard({
           {waiting ? (
             <div className="animate-pulse">
               <p className="font-display text-lg font-bold text-primary">
-                {say(line.timer_label ?? "Tunggu isyarat…")}
+                {say(line.timer_label ?? t.waitSignal)}
               </p>
               <p className="mt-1.5 text-xs text-muted-foreground">
-                Bila dia beri isyarat — bagi SEGERA, dalam 2 saat.
+                {t.giveNow}
               </p>
             </div>
           ) : (
@@ -337,7 +397,7 @@ function LineCard({
                 {remaining}s
               </p>
               <p className="mt-1 text-xs font-medium text-muted-foreground">
-                {running ? "Tahan… jangan bagi dulu" : "Bersedia…"}
+                {running ? t.hold : t.ready}
               </p>
             </>
           )}
@@ -372,10 +432,12 @@ const CCS_LABELS: Record<string, string> = {
 function CcsDrawer({
   day,
   say,
+  t,
   onClose,
 }: {
   day: DayConfig
   say: (s: string) => string
+  t: Copy
   onClose: () => void
 }) {
   const [explain, setExplain] = useState(false)
@@ -393,34 +455,31 @@ function CcsDrawer({
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-border" />
 
         <div className="mb-1 flex items-baseline justify-between gap-3">
-          <h2 className="font-display text-lg font-bold text-foreground">Tahap CCS</h2>
+          <h2 className="font-display text-lg font-bold text-foreground">{t.ccsTitle}</h2>
           <button
             type="button"
             onClick={() => setExplain((v) => !v)}
             className="shrink-0 text-xs font-semibold text-primary underline-offset-4 hover:underline"
           >
-            Apa itu CCS?
+            {t.ccsWhat}
           </button>
         </div>
         <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
-          Cakap ikut tahap anak — bukan tahap yang kita harapkan.
+          {t.ccsSub}
         </p>
 
         {explain && (
           <Card className="mb-4 border-primary/30 bg-primary/5 p-4">
             <p className="text-sm leading-relaxed text-foreground">
-              <strong>CCS = tahap komunikasi anak.</strong> Ia bukan markah, dan bukan
-              ujian. Ia cuma menunjukkan cara anak berkomunikasi sekarang — supaya
-              anda boleh sesuaikan cara anda bercakap dengannya.
+              <strong>{t.ccsLead}</strong>{t.ccsBody}
             </p>
             <ul className="mt-2.5 space-y-1 text-xs leading-relaxed text-muted-foreground">
-              <li>· CCS rendah — anda banyak naratif, anak memerhati</li>
-              <li>· CCS naik — anda tunggu, anak mula beri isyarat</li>
-              <li>· CCS tinggi — anak mula pimpin, anda kembangkan</li>
+              {t.ccsBullets.map((b) => (
+                <li key={b}>{b}</li>
+              ))}
             </ul>
             <p className="mt-2.5 text-xs italic text-muted-foreground">
-              Tiada CCS “baik” atau “teruk”. Penanda aras anda ialah anak anda sendiri
-              pada Hari 1.
+              {t.ccsFoot}
             </p>
           </Card>
         )}
@@ -442,7 +501,7 @@ function CcsDrawer({
         </div>
 
         <Button variant="outline" className="w-full" onClick={onClose}>
-          Tutup
+          {t.close}
         </Button>
       </div>
     </div>
@@ -453,10 +512,12 @@ function CcsDrawer({
 function SituationDrawer({
   day,
   say,
+  t,
   onClose,
 }: {
   day: DayConfig
   say: (s: string) => string
+  t: Copy
   onClose: () => void
 }) {
   return (
@@ -471,7 +532,7 @@ function SituationDrawer({
       >
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-border" />
         <h2 className="mb-4 font-display text-lg font-bold text-foreground">
-          Jika anak buat lain…
+          {t.drawerTitle}
         </h2>
         <div className="space-y-3 pb-4">
           {day.situational_branches.map((b) => (
@@ -493,7 +554,7 @@ function SituationDrawer({
           ))}
         </div>
         <Button variant="outline" className="w-full" onClick={onClose}>
-          Tutup
+          {t.close}
         </Button>
       </div>
     </div>

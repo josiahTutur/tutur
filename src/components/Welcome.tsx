@@ -161,7 +161,7 @@ export default function Welcome({
         <button
           type="button"
           onClick={goBack}
-          aria-label="Kembali"
+          aria-label="Back"
           className={[
             "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-primary transition-all",
             // Hidden on the 3 story pages; only the 5 questions can go back.

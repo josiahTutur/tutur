@@ -184,7 +184,10 @@ export interface DayConfig {
   day_number: number
   /** 1 = D1–D7, 2 = D8–D14. */
   week: 1 | 2
+  /** The routine, e.g. "Masa Bermain Bebas". Shown as the card's small label. */
   title: string
+  /** What the day is FOR, e.g. "Kenal Pasti Minat". The card's headline. */
+  subtitle: string
   /** The daily routine this lives inside, e.g. "mandi", "makan", "main", "tidur", "tv". */
   routine: string
   goal_tag: GoalTag
@@ -198,8 +201,24 @@ export interface DayConfig {
 
   /** "SUB-GOAL IBU BAPA" or "SUB-GOAL ANAK". */
   sub_goal: string
-  /** "Kemahiran hari ini: …" */
+  /**
+   * "Kemahiran hari ini" — every technique in play today. The parent USES all of
+   * these; they are only GRADED on one of them (see `focus_skill`).
+   */
   skills_today: string[]
+  /**
+   * Which of `skills_today` the day's `focus_line` actually measures.
+   *
+   * MUST be stated, not inferred. The obvious shortcut — checking whether a skill
+   * name appears inside `focus_line` — silently fails on the real content:
+   *
+   *   Day 5  skills: "Fikiran Yang Sama"  →  focus: "Label ikut pandangan anak…"
+   *   Day 6  skills: "Beri Pilihan (2 SAHAJA)" → focus: "Beri Pilihan 2 SAHAJA…"
+   *
+   * The SLT describes the BEHAVIOUR in the focus line, not the technique's name,
+   * so string matching marks the wrong chip — or none at all. Content states it.
+   */
+  focus_skill: string
   /** Free-text ARAHAN block — the setup instructions. */
   arahan: string
   /**

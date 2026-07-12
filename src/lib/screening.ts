@@ -12,10 +12,22 @@
 /** The fixed 3-point screening scale. No "Lain-lain" — it must stay closed. */
 export type ScreeningAnswer = "kerap" | "kadang" | "jarang"
 
-export const SCREENING_LABELS: Record<ScreeningAnswer, string> = {
-  kerap: "Ya, kerap",
-  kadang: "Kadang-kadang",
-  jarang: "Jarang atau tidak pernah",
+/**
+ * Display labels only. The STORED value is always the enum key ("kerap"), never
+ * the label — so the flag rule, the DB rows and the SLT export stay identical
+ * whichever language the parent read the question in.
+ */
+export const SCREENING_LABELS: Record<"ms" | "en", Record<ScreeningAnswer, string>> = {
+  ms: {
+    kerap: "Ya, kerap",
+    kadang: "Kadang-kadang",
+    jarang: "Jarang atau tidak pernah",
+  },
+  en: {
+    kerap: "Yes, often",
+    kadang: "Sometimes",
+    jarang: "Rarely or never",
+  },
 }
 
 /** A12 — existing diagnosis. Anything but `tiada` routes to variant C. */
@@ -26,6 +38,18 @@ export type ChildAgeBucket = "bawah_12m" | "1_2" | "2_3" | "3_4" | "lain"
 
 /** A6 — parent age bucket. Analytics only; never affects content. */
 export type ParentAgeBucket = "bawah_25" | "25_34" | "35_44" | "45_54" | "lain"
+
+/**
+ * The language the CHILD HEARS most at home — not the parent's preference.
+ *
+ * `campur` (code-switched Malay + English) is expected to be the most common
+ * answer in Malaysia. Omitting it would have forced families to pick one at
+ * random and quietly corrupted the data.
+ *
+ * `lain` is not a failure state: it is the roadmap. It tells us which language
+ * to build next, and how many families are waiting for it.
+ */
+export type HomeLanguage = "melayu" | "english" | "campur" | "lain"
 
 /** A5 — sets `{panggilan}` used inside every activity script. */
 export type Relationship = "ibu" | "ayah" | "nenek" | "datuk" | "lain"

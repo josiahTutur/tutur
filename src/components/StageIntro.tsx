@@ -133,7 +133,7 @@ export default function StageIntro({
         <button
           type="button"
           onClick={goBack}
-          aria-label={s.back}
+          aria-label="Back"
           className={[
             "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-primary transition-all",
             step === 0 ? "pointer-events-none opacity-0" : "opacity-100",

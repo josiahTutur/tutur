@@ -38,6 +38,7 @@ const DEMO: OnboardingResult = {
   panggilan: "Ibu",
   relationship: "ibu",
   parentAge: "25_34",
+  homeLanguage: "melayu",
   screening: { q1: "kerap", q2: "kerap", q3: "kerap", q4: "kerap", q5: "kerap", q6: "tiada" },
   flags: [],
   variant: "A",

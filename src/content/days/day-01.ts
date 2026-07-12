@@ -10,7 +10,8 @@ const day01 = {
   "kind": "activity",
   "day_number": 1,
   "week": 1,
-  "title": "Masa Bermain Bebas — Kenal Pasti Minat",
+  "title": "Masa Bermain Bebas",
+  "subtitle": "Kenal Pasti Minat",
   "routine": "main",
   "goal_tag": "G1",
   "emphasis": ["receptif", "ekspresif"],
@@ -21,8 +22,9 @@ const day01 = {
 
   "sub_goal": "Kenal pasti MINAT {anak} sebagai konteks aktiviti 14 hari",
   "skills_today": ["Self Talk", "Parallel Talk", "Withhold & Wait"],
+  "focus_skill": "Withhold & Wait",
   "arahan": "Letak 3 pilihan mainan depan {anak}: [A] Anak patung/Barbie · [B] Masak-masak · [C] Lego/Blok. Duduk sama aras. TUNGGU. Perhatikan mana {anak} pilih — itu konteks minggu ini. Jangan cadangkan apa-apa.",
-  "focus_line": "Withhold & Wait 5 saat tanpa suggest — biar {anak} pilih sendiri",
+  "focus_line": "Withhold & Wait 5 saat tanpa suggest, biar {anak} pilih sendiri",
 
   "ccs_prompts": [
     {

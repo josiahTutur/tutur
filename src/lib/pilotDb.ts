@@ -68,6 +68,7 @@ export async function savePilotOnboarding(
   // 1 ── Identity → the vault. Names never touch the clinical store.
   const otherTexts: Record<string, string> = {}
   if (r.childAgeOther) otherTexts.child_age = r.childAgeOther
+  if (r.homeLanguageOther) otherTexts.home_language = r.homeLanguageOther
   if (r.diagnosisOther) otherTexts.diagnosis = r.diagnosisOther
   if (r.relationship === "lain") otherTexts.panggilan = r.panggilan
 
@@ -107,6 +108,8 @@ export async function savePilotOnboarding(
     age: AGE_LABELS[r.childAge] ?? r.childAge,
     age_bucket: r.childAge,
     panggilan: r.panggilan,
+    // What the child HEARS at home — a clinical input, not a UI preference.
+    home_language: r.homeLanguage,
     stage: PILOT_DEFAULTS.stage, // ⚠ fake — see PILOT_DEFAULTS
     profiled_at: new Date().toISOString().slice(0, 10),
     primary_goal: PILOT_DEFAULTS.goal,
@@ -161,6 +164,62 @@ export async function savePilotOnboarding(
   if (confErr) return { ok: false, error: `confidence: ${confErr.message}` }
 
   return { ok: true, childId }
+}
+
+/**
+ * Should the dashboard show the SLT recommendation? (spec §5.1)
+ *
+ * Reads the LATEST screening, not the day-0 baseline — the D7/D14 re-screens
+ * append new rows (spec §5.12), and the newest one is the truth. So:
+ *
+ *   · re-screen still flags  → a NEW recommendation, made on new evidence.
+ *     A prior dismissal doesn't silence it; it has earned the right to be seen.
+ *   · re-screen comes back clear → variant A → the banner is gone for good.
+ *
+ * Comparing `dismissed_at` against `taken_at` gives us all of that for free. A
+ * boolean "dismissed" flag could not express any of it.
+ */
+export async function loadSltBanner(): Promise<{ show: boolean; childId: string } | null> {
+  const { data: auth } = await supabase.auth.getUser()
+  const uid = auth.user?.id
+  if (!uid) return null
+
+  const { data: child } = await supabase
+    .from("children")
+    .select("id, slt_banner_dismissed_at")
+    .eq("guardian_id", uid)
+    .not("onboarded_at", "is", null)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
+  if (!child) return null
+
+  // Newest administration wins — day 14 beats day 7 beats the day-0 baseline.
+  const { data: screening } = await supabase
+    .from("screening_baseline")
+    .select("variant, taken_at")
+    .eq("child_id", child.id)
+    .order("day_number", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (screening?.variant !== "B") return { show: false, childId: child.id }
+
+  const dismissed = child.slt_banner_dismissed_at
+    ? new Date(child.slt_banner_dismissed_at as string)
+    : null
+  const taken = new Date(screening.taken_at as string)
+
+  return { show: !dismissed || dismissed < taken, childId: child.id }
+}
+
+/** Parent closed the banner. It stays closed until the next re-screen flags again. */
+export async function dismissSltBanner(childId: string): Promise<void> {
+  await supabase
+    .from("children")
+    .update({ slt_banner_dismissed_at: new Date().toISOString() })
+    .eq("id", childId)
 }
 
 /**

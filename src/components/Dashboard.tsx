@@ -47,7 +47,7 @@ export default function Dashboard() {
         {/* Circular profile placeholder with soft neon ring */}
         <button
           type="button"
-          aria-label="Profil"
+          aria-label="Profile"
           className="relative h-10 w-10 rounded-full p-[2px] shadow-glow-cyan transition-transform active:scale-95"
           style={{
             background:

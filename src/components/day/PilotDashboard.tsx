@@ -62,7 +62,7 @@ export function PilotDashboard({
             type="button"
             onClick={() => setBannerDismissed(true)}
             className="absolute right-2 top-2 rounded-full p-1 text-muted-foreground hover:bg-muted"
-            aria-label="Tutup"
+            aria-label="Close"
           >
             <X className="size-4" />
           </button>

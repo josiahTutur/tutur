@@ -12,6 +12,7 @@ import {
 } from "@/lib/activities"
 import ProgressCalendar from "@/components/ProgressCalendar"
 import { DayPlayer } from "@/components/day/DayPlayer"
+import { SltBanner } from "@/components/day/SltBanner"
 import { TodaysActivityCard } from "@/components/day/TodaysActivityCard"
 import { dayConfig } from "@/content/days"
 import { type Vars } from "@/lib/interpolate"
@@ -253,6 +254,8 @@ export default function ActivityLibrary({
   relationship = "Ibu Bapa",
   childName,
   panggilan,
+  sltBanner = false,
+  onDismissSlt,
   routines = [],
   activityCodes = [],
   records,
@@ -265,6 +268,9 @@ export default function ActivityLibrary({
   childName?: string
   /** {panggilan} — what the child calls this parent ("Ibu", "Nenek", "Mak Long"). */
   panggilan?: string
+  /** Show the SLT recommendation (spec §5.1). */
+  sltBanner?: boolean
+  onDismissSlt?: () => void
   /** Routine codes the parent selected — only these activities are shown. */
   routines?: string[]
   /** Activity codes the parent curated during onboarding — scopes the catalogue. */
@@ -360,6 +366,11 @@ export default function ActivityLibrary({
             vars={dayVars}
             onOpen={() => setDayOpen(true)}
           />
+
+          {/* The SLT recommendation sits UNDER today's card, never above it.
+              She came here to do the activity; that is the hero. This waits
+              patiently below — an open door, not a summons. */}
+          {sltBanner && onDismissSlt && <SltBanner onDismiss={onDismissSlt} />}
 
           <p className="text-sm text-muted-foreground">
             {s.intro}

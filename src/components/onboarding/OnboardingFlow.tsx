@@ -26,7 +26,7 @@ import { useEffect, useRef, useState } from "react"
 import { ArrowLeft, ArrowRight, Check } from "lucide-react"
 
 import { PrimaryButton, StoryPage } from "@/components/Welcome"
-import { useT } from "@/lib/i18n"
+import { useLang, useT } from "@/lib/i18n"
 import { APP_HEIGHT, useViewportHeight } from "@/lib/useViewportHeight"
 import {
   type Draft,
@@ -40,6 +40,7 @@ import {
   SCREENING_LABELS,
   type ChildAgeBucket,
   type Diagnosis,
+  type HomeLanguage,
   type ParentAgeBucket,
   type Relationship,
   type ResultVariant,
@@ -59,6 +60,9 @@ export interface OnboardingResult {
   panggilan: string
   relationship: Relationship
   parentAge: ParentAgeBucket
+  /** What the CHILD hears most at home — the input that should drive content. */
+  homeLanguage: HomeLanguage
+  homeLanguageOther?: string
   screening: ScreeningInput
   diagnosisOther?: string
   flags: string[]
@@ -75,7 +79,7 @@ export interface OnboardingResult {
  */
 type Step =
   | "maya" | "story0" | "story1"
-  | "A2" | "A3" | "A4" | "A5" | "A6"
+  | "A2" | "A3" | "A4" | "A5" | "A6" | "LANG"
   | "slt"
   | "A7" | "A8" | "A9" | "A10" | "A11" | "A12" | "A13" | "A14"
 
@@ -91,7 +95,239 @@ type Step =
  * Splitting them also earns the right to ask part 2: the SLT credibility screen
  * sits between, so the clinical questions arrive with a reason attached.
  */
-const PART1: Step[] = ["A2", "A3", "A4", "A5", "A6"]        // about you and your child
+
+/* -------------------------------------------------------------------------- *
+ *  Copy — Malay first, English second.
+ *
+ *  IMPORTANT: only the LABELS are translated. Every stored value stays an enum
+ *  ("kerap", "ibu", "2_3"), so the screening flags, the database rows and the
+ *  SLT export are byte-identical whichever language the parent happened to read
+ *  the question in. Translating the data as well as the copy would silently make
+ *  a Malay family and an English family non-comparable in the pilot dataset.
+ * -------------------------------------------------------------------------- */
+const STR = {
+  ms: {
+    // Maya intro
+    mayaTitle: "Hai! Saya Maya.",
+    mayaBody: "Saya akan temani anda selama 14 hari — 15 minit sehari, dalam rutin biasa di rumah.",
+
+    // Chrome
+    back: "Kembali",
+    next: "Seterusnya",
+    continue: "Teruskan",
+    lastQuestion: "Soalan terakhir",
+    saving: "Menyimpan…",
+    saveFailed: "Gagal menyimpan. Cuba lagi.",
+    toDashboard: "Pergi ke dashboard",
+    letsContinue: "Jom teruskan",
+
+    // A2 · child nickname
+    q_nickname: "Sebelum kita mula — siapa nama panggilan anak anda?",
+    ph_nickname: "cth: Adam",
+
+    // A3 · child age
+    q_childAge: (n: string) => `Berapa umur ${n} sekarang?`,
+    childAge: {
+      bawah_12m: "Bawah 12 bulan",
+      "1_2": "1 – 2 tahun",
+      "2_3": "2 – 3 tahun",
+      "3_4": "3 – 4 tahun",
+      lain: "Lain-lain",
+    },
+    ph_childAgeOther: "cth: 5 (tahun)",
+
+    // A4 · parent name
+    q_parentName: "Dan anda? Apa nama anda?",
+    ph_parentName: "cth: Siti",
+
+    // A5 · relationship
+    q_relationship: (n: string) => `Apa hubungan anda dengan ${n}?`,
+    relationship: {
+      ibu: "Ibu",
+      ayah: "Ayah",
+      nenek: "Nenek",
+      datuk: "Datuk",
+      lain: "Lain-lain",
+    },
+    hint_panggilan: (n: string) => `Apa ${n} panggil anda?`,
+    ph_panggilan: "cth: Mak Long",
+
+    // A6 · parent age
+    q_parentAge: "Berapa umur anda?",
+    parentAge: {
+      bawah_25: "Bawah 25 tahun",
+      "25_34": "25 – 34 tahun",
+      "35_44": "35 – 44 tahun",
+      "45_54": "45 – 54 tahun",
+      lain: "Lain-lain",
+    },
+    ph_parentAgeOther: "cth: 58",
+
+    // LANG · home language
+    q_language: (n: string) => `Bahasa apa yang paling kerap didengar ${n} di rumah?`,
+    language: {
+      melayu: "Bahasa Melayu",
+      english: "English",
+      campur: "Campuran Melayu & English",
+      lain: "Lain-lain",
+    },
+    ph_languageOther: "cth: Mandarin, Tamil",
+
+    // A7–A11 · screening
+    q_s1: (n: string) => `Adakah ${n} kerap membuat pandangan mata dengan anda?`,
+    q_s2: (n: string) => `Adakah ${n} menunjukkan minat untuk berinteraksi dengan anda atau orang lain?`,
+    q_s3: (n: string) => `Adakah ${n} meniru bunyi atau aksi anda? Contohnya bunyi “brmm” atau tepuk tangan.`,
+    q_s4: (n: string) => `Adakah ${n} menggunakan isyarat seperti menunjuk pada benda yang dia mahu?`,
+    q_s5: (n: string) => `Adakah ${n} mengeluarkan bunyi atau vokalisasi — walaupun bukan perkataan sebenar?`,
+    notDiagnosis: "Ini bukan diagnosis.",
+    notDiagnosisLong: "Ini bukan diagnosis — jawapan anda membantu Tutur sesuaikan program.",
+
+    // A12 · diagnosis
+    q_diagnosis: (n: string) => `Adakah ${n} pernah didiagnosis oleh profesional dengan mana-mana keadaan berikut?`,
+    diagnosis: {
+      tiada: "Tiada",
+      pendengaran: "Masalah pendengaran",
+      pertuturan: "Masalah pertuturan (cth: CAS, dysarthria)",
+      aac: "Menggunakan AAC",
+      lain: "Lain-lain",
+    },
+    ph_diagnosisOther: "Nyatakan diagnosis",
+
+    // SLT credibility
+    slt_badge: "Dibangunkan bersama pakar",
+    slt_title: "Program ini dibina bersama Ahli Terapi Pertuturan",
+    slt_body: "Kandungan Tutur disemak dua Ahli Terapi Pertuturan berdaftar",
+    slt_accent: "— 40 tahun pengalaman.",
+
+    // A13 · results
+    rA_badge: "Sedia bermula",
+    rA_titleAfter: " dan anda dah sedia",
+    rA_body: "Sepanjang 14 hari, fokus kita: perubahan ANDA dulu — anak akan menyusul.",
+    rB_badge: "Cadangan penilaian",
+    rB_title: "Kami syorkan penilaian oleh SLT",
+    rB_body: "Anda tetap boleh mula program ini — ia direka untuk melengkapkan terapi, bukan menggantikannya.",
+    rC_badge: "Guna bersama terapi",
+    rC_titleBefore: "Program ini sesuai bersama terapi ",
+    rC_body: "Kongsikan tracker anda dengan SLT anda pada setiap sesi.",
+
+    // A14 · confidence
+    q_confidence: (n: string) => `Sejauh mana yakin anda SEKARANG untuk membimbing ${n} berkomunikasi?`,
+    hint_confidence: "Satu soalan terakhir.",
+    conf_low: "1 · Tidak yakin",
+    conf_high: "5 · Sangat yakin",
+
+    fallbackChild: "anak anda",
+  },
+  en: {
+    mayaTitle: "Hi! I'm Maya.",
+    mayaBody: "I'll be with you for 14 days — 15 minutes a day, inside your normal routine at home.",
+
+    back: "Back",
+    next: "Next",
+    continue: "Continue",
+    lastQuestion: "Last question",
+    saving: "Saving…",
+    saveFailed: "Couldn't save. Please try again.",
+    toDashboard: "Go to dashboard",
+    letsContinue: "Let's continue",
+
+    q_nickname: "Before we start — what do you call your child?",
+    ph_nickname: "e.g. Adam",
+
+    q_childAge: (n: string) => `How old is ${n} now?`,
+    childAge: {
+      bawah_12m: "Under 12 months",
+      "1_2": "1 – 2 years",
+      "2_3": "2 – 3 years",
+      "3_4": "3 – 4 years",
+      lain: "Other",
+    },
+    ph_childAgeOther: "e.g. 5 (years)",
+
+    q_parentName: "And you? What's your name?",
+    ph_parentName: "e.g. Siti",
+
+    q_relationship: (n: string) => `What is your relationship to ${n}?`,
+    relationship: {
+      ibu: "Mother",
+      ayah: "Father",
+      nenek: "Grandmother",
+      datuk: "Grandfather",
+      lain: "Other",
+    },
+    hint_panggilan: (n: string) => `What does ${n} call you?`,
+    ph_panggilan: "e.g. Mak Long",
+
+    q_parentAge: "How old are you?",
+    parentAge: {
+      bawah_25: "Under 25",
+      "25_34": "25 – 34",
+      "35_44": "35 – 44",
+      "45_54": "45 – 54",
+      lain: "Other",
+    },
+    ph_parentAgeOther: "e.g. 58",
+
+    q_language: (n: string) => `Which language does ${n} hear most at home?`,
+    language: {
+      melayu: "Malay",
+      english: "English",
+      campur: "Mixed Malay & English",
+      lain: "Other",
+    },
+    ph_languageOther: "e.g. Mandarin, Tamil",
+
+    q_s1: (n: string) => `Does ${n} often make eye contact with you?`,
+    q_s2: (n: string) => `Does ${n} show interest in interacting with you or other people?`,
+    q_s3: (n: string) => `Does ${n} imitate your sounds or actions? For example a “brmm” sound, or clapping.`,
+    q_s4: (n: string) => `Does ${n} use gestures, such as pointing at something they want?`,
+    q_s5: (n: string) => `Does ${n} make sounds or vocalisations — even if they aren't real words?`,
+    notDiagnosis: "This is not a diagnosis.",
+    notDiagnosisLong: "This is not a diagnosis — your answers help Tutur tailor the programme.",
+
+    q_diagnosis: (n: string) => `Has ${n} ever been diagnosed by a professional with any of the following?`,
+    diagnosis: {
+      tiada: "None",
+      pendengaran: "Hearing difficulties",
+      pertuturan: "Speech difficulties (e.g. CAS, dysarthria)",
+      aac: "Uses AAC",
+      lain: "Other",
+    },
+    ph_diagnosisOther: "Please specify the diagnosis",
+
+    slt_badge: "Built with experts",
+    slt_title: "This programme was built with Speech-Language Therapists",
+    slt_body: "Tutur's content is reviewed by two registered Speech-Language Therapists",
+    slt_accent: "— 40 years of experience.",
+
+    rA_badge: "Ready to begin",
+    rA_titleAfter: " and you are ready",
+    rA_body: "Over the 14 days, our focus is YOUR change first — your child will follow.",
+    rB_badge: "Assessment recommended",
+    rB_title: "We recommend an assessment by an SLT",
+    rB_body: "You can still start this programme — it's designed to complement therapy, not replace it.",
+    rC_badge: "Use alongside therapy",
+    rC_titleBefore: "This programme works well alongside ",
+    rC_body: "Share your tracker with your SLT at every session.",
+
+    q_confidence: (n: string) => `How confident do you feel RIGHT NOW about guiding ${n} to communicate?`,
+    hint_confidence: "One last question.",
+    conf_low: "1 · Not confident",
+    conf_high: "5 · Very confident",
+
+    fallbackChild: "your child",
+  },
+}
+
+/**
+ * The active language's copy. Derived from the MS table, which makes MS the
+ * canonical shape: add a key there and EN fails to compile until it's translated
+ * too. That's the point — a missing translation should be a build error, not a
+ * Malay string quietly appearing on an English screen.
+ */
+type Copy = (typeof STR)["ms"]
+
+const PART1: Step[] = ["A2", "A3", "A4", "A5", "A6", "LANG"] // about you and your child
 const PART2: Step[] = ["A7", "A8", "A9", "A10", "A11", "A12"] // soalan ringkas tentang {anak}
 
 /**
@@ -111,6 +347,8 @@ const MAX_LEN = {
   /** Spoken aloud in every activity script — short by necessity, not just by UI. */
   panggilan: 20,
   diagnosis: 40,
+  /** "Lain-lain" home language — a language name, so short. */
+  language: 24,
   /** Ages are 1–2 digits. Numeric-only, so no unit text to fit. */
   age: 2,
 } as const
@@ -118,10 +356,13 @@ const MAX_LEN = {
 /** Strip everything that isn't a digit. Used by the two age fields. */
 const digitsOnly = (v: string) => v.replace(/\D/g, "")
 
-const SCREENING_OPTS = (["kerap", "kadang", "jarang"] as ScreeningAnswer[]).map((v) => ({
-  value: v,
-  label: SCREENING_LABELS[v],
-}))
+/** Built per-render now, because the labels depend on the active language. */
+function screeningOpts(lang: "ms" | "en") {
+  return (["kerap", "kadang", "jarang"] as ScreeningAnswer[]).map((v) => ({
+    value: v,
+    label: SCREENING_LABELS[lang][v],
+  }))
+}
 
 /**
  * A step we're willing to resume onto. The Maya intro and story pages are cheap
@@ -131,7 +372,7 @@ const SCREENING_OPTS = (["kerap", "kadang", "jarang"] as ScreeningAnswer[]).map(
  */
 function resumableStep(s: string | undefined): Step | null {
   const known: Step[] = [
-    "A2", "A3", "A4", "A5", "A6",
+    "A2", "A3", "A4", "A5", "A6", "LANG",
     "slt",
     "A7", "A8", "A9", "A10", "A11", "A12", "A13", "A14",
   ]
@@ -161,6 +402,8 @@ export function OnboardingFlow({
 }) {
   const t = useT()
   const w = t.welcome
+  const { lang } = useLang()
+  const s = STR[lang]
 
   // Publishes the REAL usable height (keyboard-aware) as --app-h. Onboarding is
   // the one flow that must never scroll, so it owns this.
@@ -182,6 +425,10 @@ export function OnboardingFlow({
   const [panggilanOther, setPanggilanOther] = useState(id?.panggilanOther ?? "")
   const [parentAge, setParentAge] = useState<ParentAgeBucket | null>(a?.parentAge ?? null)
   const [parentAgeOther, setParentAgeOther] = useState(id?.parentAgeOther ?? "")
+  const [homeLanguage, setHomeLanguage] = useState<HomeLanguage | null>(
+    a?.homeLanguage ?? null
+  )
+  const [homeLanguageOther, setHomeLanguageOther] = useState(id?.homeLanguageOther ?? "")
 
   const [q1, setQ1] = useState<ScreeningAnswer | null>(a?.q1 ?? null)
   const [q2, setQ2] = useState<ScreeningAnswer | null>(a?.q2 ?? null)
@@ -192,7 +439,7 @@ export function OnboardingFlow({
   const [diagnosisOther, setDiagnosisOther] = useState(id?.diagnosisOther ?? "")
   const [confidence, setConfidence] = useState<number | null>(a?.confidence ?? null)
 
-  const name = anak.trim() || "anak anda"
+  const name = anak.trim() || s.fallbackChild
 
   /**
    * A3 age gate: under 12 months, A11 (vokalisasi) is never asked (spec §5.2).
@@ -227,7 +474,7 @@ export function OnboardingFlow({
       : part2.includes(step)
         ? { label: w.questionOf, n: part2.indexOf(step) + 1, total: part2.length }
         : step === "A14"
-          ? { label: "Soalan terakhir", n: 1, total: 1 }
+          ? { label: s.lastQuestion, n: 1, total: 1 }
           : null
 
   /**
@@ -250,6 +497,7 @@ export function OnboardingFlow({
         childAge: childAge ?? undefined,
         relationship: relationship ?? undefined,
         parentAge: parentAge ?? undefined,
+        homeLanguage: homeLanguage ?? undefined,
         q1: q1 ?? undefined,
         q2: q2 ?? undefined,
         q3: q3 ?? undefined,
@@ -264,6 +512,7 @@ export function OnboardingFlow({
         childAgeOther: childAgeOther.trim() || undefined,
         panggilanOther: panggilanOther.trim() || undefined,
         parentAgeOther: parentAgeOther.trim() || undefined,
+        homeLanguageOther: homeLanguageOther.trim() || undefined,
         diagnosisOther: diagnosisOther.trim() || undefined,
       }
     )
@@ -292,6 +541,9 @@ export function OnboardingFlow({
             ],
       relationship: relationship!,
       parentAge: parentAge!,
+      homeLanguage: homeLanguage!,
+      homeLanguageOther:
+        homeLanguage === "lain" ? homeLanguageOther.trim() : undefined,
       screening,
       diagnosisOther: q6 === "lain" ? diagnosisOther.trim() : undefined,
       flags: screeningFlags(screening),
@@ -339,7 +591,7 @@ export function OnboardingFlow({
         <button
           type="button"
           onClick={() => go(-1)}
-          aria-label="Kembali"
+          aria-label="Back"
           className={[
             "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-primary transition-all",
             idx === 0 ? "pointer-events-none opacity-0" : "opacity-100",
@@ -392,13 +644,14 @@ export function OnboardingFlow({
             .filter(Boolean)
             .join(" ")}
         >
-          {step === "maya" && <MayaIntro />}
+          {step === "maya" && <MayaIntro s={s} />}
           {isStory && <StoryPage step={storyStep} w={w} />}
 
           {step === "A2" && (
             <TextQuestion
-              question="Sebelum kita mula — siapa nama panggilan anak anda?"
-              placeholder="cth: Adam"
+              nextLabel={w.next}
+              question={s.q_nickname}
+              placeholder={s.ph_nickname}
               maxLength={MAX_LEN.childNickname}
               value={anak}
               onChange={setAnak}
@@ -408,18 +661,19 @@ export function OnboardingFlow({
 
           {step === "A3" && (
             <ChoiceQuestion
-              question={`Berapa umur ${name} sekarang?`}
+              nextLabel={w.next}
+              question={s.q_childAge(name)}
               cols={2}
               value={childAge}
               options={[
-                { value: "bawah_12m", label: "Bawah 12 bulan" },
-                { value: "1_2", label: "1 – 2 tahun" },
-                { value: "2_3", label: "2 – 3 tahun" },
-                { value: "3_4", label: "3 – 4 tahun" },
-                { value: "lain", label: "Lain-lain" },
+                { value: "bawah_12m", label: s.childAge.bawah_12m },
+                { value: "1_2", label: s.childAge["1_2"] },
+                { value: "2_3", label: s.childAge["2_3"] },
+                { value: "3_4", label: s.childAge["3_4"] },
+                { value: "lain", label: s.childAge.lain },
               ]}
               otherValue={childAgeOther}
-              otherPlaceholder="cth: 5 (tahun)"
+              otherPlaceholder={s.ph_childAgeOther}
               otherMaxLength={MAX_LEN.age}
               otherNumeric
               onOtherChange={setChildAgeOther}
@@ -433,8 +687,9 @@ export function OnboardingFlow({
 
           {step === "A4" && (
             <TextQuestion
-              question="Dan anda? Apa nama anda?"
-              placeholder="cth: Siti"
+              nextLabel={w.next}
+              question={s.q_parentName}
+              placeholder={s.ph_parentName}
               maxLength={MAX_LEN.parentName}
               value={parentName}
               onChange={setParentName}
@@ -444,19 +699,20 @@ export function OnboardingFlow({
 
           {step === "A5" && (
             <ChoiceQuestion
-              question={`Apa hubungan anda dengan ${name}?`}
+              nextLabel={w.next}
+              question={s.q_relationship(name)}
               cols={2}
               value={relationship}
               options={[
-                { value: "ibu", label: "Ibu" },
-                { value: "ayah", label: "Ayah" },
-                { value: "nenek", label: "Nenek" },
-                { value: "datuk", label: "Datuk" },
-                { value: "lain", label: "Lain-lain" },
+                { value: "ibu", label: s.relationship.ibu },
+                { value: "ayah", label: s.relationship.ayah },
+                { value: "nenek", label: s.relationship.nenek },
+                { value: "datuk", label: s.relationship.datuk },
+                { value: "lain", label: s.relationship.lain },
               ]}
               otherValue={panggilanOther}
-              otherHint={`Apa ${name} panggil anda?`}
-              otherPlaceholder="cth: Mak Long"
+              otherHint={s.hint_panggilan(name)}
+              otherPlaceholder={s.ph_panggilan}
               otherMaxLength={MAX_LEN.panggilan}
               onOtherChange={setPanggilanOther}
               onPick={(v) => {
@@ -469,18 +725,19 @@ export function OnboardingFlow({
 
           {step === "A6" && (
             <ChoiceQuestion
-              question="Berapa umur anda?"
+              nextLabel={w.next}
+              question={s.q_parentAge}
               cols={2}
               value={parentAge}
               options={[
-                { value: "bawah_25", label: "Bawah 25 tahun" },
-                { value: "25_34", label: "25 – 34 tahun" },
-                { value: "35_44", label: "35 – 44 tahun" },
-                { value: "45_54", label: "45 – 54 tahun" },
-                { value: "lain", label: "Lain-lain" },
+                { value: "bawah_25", label: s.parentAge.bawah_25 },
+                { value: "25_34", label: s.parentAge["25_34"] },
+                { value: "35_44", label: s.parentAge["35_44"] },
+                { value: "45_54", label: s.parentAge["45_54"] },
+                { value: "lain", label: s.parentAge.lain },
               ]}
               otherValue={parentAgeOther}
-              otherPlaceholder="cth: 58"
+              otherPlaceholder={s.ph_parentAgeOther}
               otherMaxLength={MAX_LEN.age}
               otherNumeric
               onOtherChange={setParentAgeOther}
@@ -492,60 +749,94 @@ export function OnboardingFlow({
             />
           )}
 
-          {step === "slt" && <SltCredibility />}
+          {step === "LANG" && (
+            <ChoiceQuestion
+              nextLabel={w.next}
+              question={s.q_language(name)}
+              cols={1}
+              value={homeLanguage}
+              options={[
+                { value: "melayu", label: s.language.melayu },
+                { value: "english", label: s.language.english },
+                { value: "campur", label: s.language.campur },
+                { value: "lain", label: s.language.lain },
+              ]}
+              otherValue={homeLanguageOther}
+              otherPlaceholder={s.ph_languageOther}
+              otherMaxLength={MAX_LEN.language}
+              onOtherChange={setHomeLanguageOther}
+              onPick={(v) => {
+                setHomeLanguage(v as HomeLanguage)
+                if (v !== "lain") go(1)
+              }}
+              onOtherSubmit={() => go(1)}
+            />
+          )}
+
+          {step === "slt" && <SltCredibility s={s} />}
 
           {step === "A7" && (
             <ScreeningQuestion
-              question={`Adakah ${name} kerap membuat pandangan mata dengan anda?`}
+              question={s.q_s1(name)}
               value={q1}
-              footer="Ini bukan diagnosis — jawapan anda membantu Tutur sesuaikan program."
+              lang={lang}
+              footer={s.notDiagnosisLong}
               onPick={(v) => { setQ1(v); go(1) }}
             />
           )}
           {step === "A8" && (
             <ScreeningQuestion
-              question={`Adakah ${name} menunjukkan minat untuk berinteraksi dengan anda atau orang lain?`}
+              question={s.q_s2(name)}
               value={q2}
+              lang={lang}
+              footer={s.notDiagnosis}
               onPick={(v) => { setQ2(v); go(1) }}
             />
           )}
           {step === "A9" && (
             <ScreeningQuestion
-              question={`Adakah ${name} meniru bunyi atau aksi anda? Contohnya bunyi “brmm” atau tepuk tangan.`}
+              question={s.q_s3(name)}
               value={q3}
+              lang={lang}
+              footer={s.notDiagnosis}
               onPick={(v) => { setQ3(v); go(1) }}
             />
           )}
           {step === "A10" && (
             <ScreeningQuestion
-              question={`Adakah ${name} menggunakan isyarat seperti menunjuk pada benda yang dia mahu?`}
+              question={s.q_s4(name)}
               value={q4}
+              lang={lang}
+              footer={s.notDiagnosis}
               onPick={(v) => { setQ4(v); go(1) }}
             />
           )}
           {step === "A11" && (
             <ScreeningQuestion
-              question={`Adakah ${name} mengeluarkan bunyi atau vokalisasi — walaupun bukan perkataan sebenar?`}
+              question={s.q_s5(name)}
               value={q5}
+              lang={lang}
+              footer={s.notDiagnosis}
               onPick={(v) => { setQ5(v); go(1) }}
             />
           )}
 
           {step === "A12" && (
             <ChoiceQuestion
-              question={`Adakah ${name} pernah didiagnosis oleh profesional dengan mana-mana keadaan berikut?`}
+              nextLabel={w.next}
+              question={s.q_diagnosis(name)}
               cols={1}
-              footer="Ini bukan diagnosis."
+              footer={s.notDiagnosis}
               value={q6}
               options={[
-                { value: "tiada", label: "Tiada" },
-                { value: "pendengaran", label: "Masalah pendengaran" },
-                { value: "pertuturan", label: "Masalah pertuturan (cth: CAS, dysarthria)" },
-                { value: "aac", label: "Menggunakan AAC" },
-                { value: "lain", label: "Lain-lain" },
+                { value: "tiada", label: s.diagnosis.tiada },
+                { value: "pendengaran", label: s.diagnosis.pendengaran },
+                { value: "pertuturan", label: s.diagnosis.pertuturan },
+                { value: "aac", label: s.diagnosis.aac },
+                { value: "lain", label: s.diagnosis.lain },
               ]}
               otherValue={diagnosisOther}
-              otherPlaceholder="Nyatakan diagnosis"
+              otherPlaceholder={s.ph_diagnosisOther}
               otherMaxLength={MAX_LEN.diagnosis}
               onOtherChange={setDiagnosisOther}
               onPick={(v) => {
@@ -558,6 +849,7 @@ export function OnboardingFlow({
 
           {step === "A13" && q6 && (
             <ResultPage
+              s={s}
               name={name}
               variant={resultVariant({
                 q1: q1!, q2: q2!, q3: q3!, q4: q4!,
@@ -568,7 +860,7 @@ export function OnboardingFlow({
           )}
 
           {step === "A14" && (
-            <ConfidenceQuestion name={name} value={confidence} onPick={setConfidence} />
+            <ConfidenceQuestion s={s} name={name} value={confidence} onPick={setConfidence} />
           )}
         </div>
       </div>
@@ -598,13 +890,13 @@ export function OnboardingFlow({
           )}
           {step === "slt" && (
             <PrimaryButton onClick={() => go(1)}>
-              Jom teruskan
+              {s.letsContinue}
               <ArrowRight className="h-5 w-5" />
             </PrimaryButton>
           )}
           {step === "A13" && (
             <PrimaryButton onClick={() => go(1)}>
-              Teruskan
+              {s.continue}
               <ArrowRight className="h-5 w-5" />
             </PrimaryButton>
           )}
@@ -612,12 +904,12 @@ export function OnboardingFlow({
             <>
               {error && (
                 <p className="mb-3 rounded-2xl border-[1.5px] border-destructive/40 bg-destructive/5 px-4 py-3 text-center text-xs font-medium text-destructive">
-                  Gagal menyimpan. Cuba lagi.
+                  {s.saveFailed}
                   <span className="mt-1 block font-mono text-[10px] opacity-70">{error}</span>
                 </p>
               )}
               <PrimaryButton disabled={confidence === null || saving} onClick={finish}>
-                {saving ? "Menyimpan…" : "Pergi ke dashboard"}
+                {saving ? s.saving : s.toDashboard}
                 {!saving && <ArrowRight className="h-5 w-5" />}
               </PrimaryButton>
             </>
@@ -632,7 +924,7 @@ export function OnboardingFlow({
 /*  Pages                                                                      */
 /* -------------------------------------------------------------------------- */
 
-function MayaIntro() {
+function MayaIntro({ s }: { s: Copy }) {
   return (
     <div className="mx-auto max-w-lg animate-fade-up text-center" style={{ animationFillMode: "both" }}>
       <img
@@ -642,10 +934,10 @@ function MayaIntro() {
         draggable={false}
       />
       <h1 className="mt-6 text-balance font-display text-2xl font-bold tracking-tight lg:text-3xl">
-        Hai! Saya Maya.
+        {s.mayaTitle}
       </h1>
       <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-muted-foreground lg:text-base">
-        Saya akan temani anda selama 14 hari — 15 minit sehari, dalam rutin biasa di rumah.
+        {s.mayaBody}
       </p>
     </div>
   )
@@ -667,7 +959,7 @@ function MayaIntro() {
  * they found out. So the copy names both, shows both numbers, and says gabungan.
  * The claim is strong AND true; it doesn't need to be shaded.
  */
-function SltCredibility() {
+function SltCredibility({ s }: { s: Copy }) {
   return (
     // Same shell as StoryPage (Welcome 1 & 2): badge → image → title → body.
     <div className="animate-fade-up" style={{ animationFillMode: "both" }}>
@@ -676,7 +968,7 @@ function SltCredibility() {
           className="inline-block rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wide"
           style={{ background: "hsl(var(--primary) / 0.12)", color: "hsl(var(--primary))" }}
         >
-          Dibangunkan bersama pakar
+          {s.slt_badge}
         </span>
       </div>
 
@@ -692,7 +984,7 @@ function SltCredibility() {
 
       <div className="mt-6 text-center">
         <h1 className="font-display text-2xl font-bold tracking-tight lg:text-3xl">
-          Program ini dibina bersama Ahli Terapi Pertuturan
+          {s.slt_title}
         </h1>
 
         {/* The claim: two therapists, 25 + 15 years, added together. "dua ...
@@ -700,8 +992,8 @@ function SltCredibility() {
             40 read as the pair's total rather than one person's career. If that
             phrase is ever cut, the number needs "gabungan" added back to stay true. */}
         <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-muted-foreground lg:text-base">
-          Kandungan Tutur disemak dua Ahli Terapi Pertuturan berdaftar{" "}
-          <span className="font-semibold text-primary">— 40 tahun pengalaman.</span>
+          {s.slt_body}{" "}
+          <span className="font-semibold text-primary">{s.slt_accent}</span>
         </p>
       </div>
     </div>
@@ -845,9 +1137,10 @@ const INPUT_CLASS =
 
 function TextQuestion({
   question, hint, answerHint, placeholder, value, maxLength, numeric = false,
-  onChange, onSubmit,
+  nextLabel, onChange, onSubmit,
 }: {
   question: string
+  nextLabel: string
   hint?: string
   answerHint?: string
   placeholder: string
@@ -881,7 +1174,7 @@ function TextQuestion({
       />
       <div className="mt-5">
         <PrimaryButton disabled={!value.trim()} onClick={onSubmit}>
-          Seterusnya
+          {nextLabel}
           <ArrowRight className="h-5 w-5" />
         </PrimaryButton>
       </div>
@@ -892,9 +1185,10 @@ function TextQuestion({
 function ChoiceQuestion({
   question, hint, answerHint, otherHint, footer, cols, options, value,
   otherValue, otherPlaceholder, otherMaxLength, otherNumeric = false,
-  onOtherChange, onPick, onOtherSubmit,
+  nextLabel, onOtherChange, onPick, onOtherSubmit,
 }: {
   question: string
+  nextLabel: string
   hint?: string
   answerHint?: string
   /**
@@ -954,7 +1248,7 @@ function ChoiceQuestion({
         />
         <div className="mt-5">
           <PrimaryButton disabled={!otherValue.trim()} onClick={onOtherSubmit}>
-            Seterusnya
+            {nextLabel}
             <ArrowRight className="h-5 w-5" />
           </PrimaryButton>
         </div>
@@ -1024,9 +1318,10 @@ function OptionCard({
  * here would make the flag rule uncomputable, so the component cannot offer one.
  */
 function ScreeningQuestion({
-  question, value, footer = "Ini bukan diagnosis.", onPick,
+  question, value, footer, lang, onPick,
 }: {
   question: string
+  lang: "ms" | "en"
   /** The already-given answer — so going back shows what they said. */
   value: ScreeningAnswer | null
   /**
@@ -1036,13 +1331,13 @@ function ScreeningQuestion({
    * five keep the short form — repeating the full sentence six times would turn
    * reassurance into noise.
    */
-  footer?: string
+  footer: string
   onPick: (v: ScreeningAnswer) => void
 }) {
   return (
     <QuestionShell question={question} footer={footer}>
       <div className="grid gap-2.5">
-        {SCREENING_OPTS.map((o) => (
+        {screeningOpts(lang).map((o) => (
           <OptionCard
             key={o.value}
             label={o.label}
@@ -1055,7 +1350,7 @@ function ScreeningQuestion({
   )
 }
 
-function ResultPage({ name, variant }: { name: string; variant: ResultVariant }) {
+function ResultPage({ s, name, variant }: { s: Copy; name: string; variant: ResultVariant }) {
   // The child's name carries the violet accent — the same colour as
   // "40 tahun pengalaman klinikal gabungan" on the credibility page. This result
   // is about THEIR child, not a generic outcome, and the colour is what says so.
@@ -1063,22 +1358,31 @@ function ResultPage({ name, variant }: { name: string; variant: ResultVariant })
 
   const copy = {
     A: {
-      badge: "Sedia bermula",
-      title: <>{child} dan anda dah sedia</>,
-      body: "Sepanjang 14 hari, fokus kita: perubahan ANDA dulu — anak akan menyusul.",
-      note: `Profil ${name} disimpan sebagai penanda aras Hari 0`,
+      badge: s.rA_badge,
+      title: <>{child}{s.rA_titleAfter}</>,
+      body: s.rA_body,
+      note: null,
+      illustration: "/welcome/ready.png" as string | null,
     },
     B: {
-      badge: "Cadangan penilaian",
-      title: <>Kami syorkan penilaian oleh SLT</>,
-      body: "Anda tetap boleh mula program ini — ia direka untuk melengkapkan terapi, bukan menggantikannya.",
-      note: "Cadangan ini akan kekal di dashboard anda.",
+      badge: s.rB_badge,
+      title: <>{s.rB_title}</>,
+      body: s.rB_body,
+      // The note used to promise a persistent dashboard banner (spec §5.1) that
+      // does not exist yet. Removed rather than left as a promise the app breaks.
+      // When the banner ships, the sentence can come back — see the plan doc.
+      note: null,
+      illustration: "/welcome/recommend-SLT.png" as string | null,
     },
     C: {
-      badge: "Guna bersama terapi",
-      title: <>Program ini sesuai bersama terapi {child}</>,
-      body: "Kongsikan tracker anda dengan SLT anda pada setiap sesi.",
+      badge: s.rC_badge,
+      title: <>{s.rC_titleBefore}{child}</>,
+      body: s.rC_body,
       note: null,
+      // A therapist working with a child — this variant is for families ALREADY in
+      // therapy, and the picture should show the therapist, not Maya. Maya isn't
+      // the one in the room with them.
+      illustration: "/welcome/therapy.png" as string | null,
     },
   }[variant]
 
@@ -1092,12 +1396,25 @@ function ResultPage({ name, variant }: { name: string; variant: ResultVariant })
           {copy.badge}
         </span>
       </div>
-      <img
-        src="/maya.png"
-        alt=""
-        className="mx-auto h-20 w-20 select-none rounded-full border-2 border-primary/20 object-cover"
-        draggable={false}
-      />
+
+      {copy.illustration ? (
+        // Wide 43:24 illustration, same treatment as the welcome and credibility
+        // pages. max-h keeps the copy and CTA below it reachable on a short phone.
+        <img
+          src={copy.illustration}
+          alt=""
+          className="max-h-[34svh] w-full select-none rounded-3xl object-contain shadow-[0_16px_40px_-16px_hsl(258_60%_40%/0.4)]"
+          draggable={false}
+        />
+      ) : (
+        <img
+          src="/maya.png"
+          alt=""
+          className="mx-auto h-20 w-20 select-none rounded-full border-2 border-primary/20 object-cover"
+          draggable={false}
+        />
+      )}
+
       <h1 className="mt-5 text-balance font-display text-2xl font-bold tracking-tight">
         {copy.title}
       </h1>
@@ -1114,16 +1431,17 @@ function ResultPage({ name, variant }: { name: string; variant: ResultVariant })
 }
 
 function ConfidenceQuestion({
-  name, value, onPick,
+  s, name, value, onPick,
 }: {
+  s: Copy
   name: string
   value: number | null
   onPick: (v: number) => void
 }) {
   return (
     <QuestionShell
-      question={`Sejauh mana yakin anda SEKARANG untuk membimbing ${name} berkomunikasi?`}
-      hint="Satu soalan terakhir."
+      question={s.q_confidence(name)}
+      hint={s.hint_confidence}
     >
       <div className="flex justify-between gap-2">
         {[1, 2, 3, 4, 5].map((n) => (
@@ -1143,8 +1461,8 @@ function ConfidenceQuestion({
         ))}
       </div>
       <div className="mt-3 flex justify-between text-xs text-muted-foreground">
-        <span>1 · Tidak yakin</span>
-        <span>5 · Sangat yakin</span>
+        <span>{s.conf_low}</span>
+        <span>{s.conf_high}</span>
       </div>
     </QuestionShell>
   )

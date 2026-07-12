@@ -30,7 +30,9 @@ import {
   type OnboardingResult,
 } from "@/components/onboarding/OnboardingFlow"
 import {
+  dismissSltBanner,
   loadPilotOnboarding,
+  loadSltBanner,
   savePilotOnboarding,
   PILOT_DEFAULTS,
 } from "@/lib/pilotDb"
@@ -137,6 +139,12 @@ export default function App() {
   // before the flow first renders, so it never flashes step 1 then jumps.
   const [draft, setDraft] = useState<Draft | null>(null)
 
+  // The SLT recommendation (spec §5.1). Shown on the dashboard when the LATEST
+  // screening is variant B and the parent hasn't dismissed that screening.
+  const [sltBanner, setSltBanner] = useState<{ show: boolean; childId: string } | null>(
+    null
+  )
+
   // Primary developmental goal (G1–G10) the parent picked after profiling.
   // Anchors the intervention pathway and is editable later from Tetapan.
   const [goal, setGoal] = useState<string>()
@@ -232,6 +240,11 @@ export default function App() {
         setActivities(
           ob?.activities?.length ? ob.activities : [...PILOT_DEFAULTS.activities]
         )
+        // Only ever surfaced for a flagged screening, so this is cheap for
+        // everyone else — it returns { show: false } and nothing renders.
+        const banner = await loadSltBanner()
+        if (!cancelled) setSltBanner(banner)
+
         clearProgress() // any local mirror is stale now; the DB is authoritative
         setView((v) => (v === "intro" || v === "auth" ? "hub" : v))
         return
@@ -373,6 +386,7 @@ export default function App() {
           // in every activity script.
           await clearDraft()
           setDraft(null)
+          setSltBanner({ show: r.variant === "B", childId: res.childId })
 
           setProfile({
             childName: r.anak,
@@ -399,6 +413,11 @@ export default function App() {
     return (
       <DashboardHub
         profile={profile}
+        sltBanner={sltBanner?.show ?? false}
+        onDismissSlt={() => {
+          setSltBanner((b) => (b ? { ...b, show: false } : b))
+          if (sltBanner?.childId) void dismissSltBanner(sltBanner.childId)
+        }}
         goal={goal}
         routines={routines}
         activities={activities}

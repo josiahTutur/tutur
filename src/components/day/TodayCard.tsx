@@ -14,6 +14,7 @@ import { Clock, FileText, Image, Play, Sparkles } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { useLang } from "@/lib/i18n"
 import { type DayConfig } from "@/lib/dayConfig"
 import { interpolate, type Vars } from "@/lib/interpolate"
 import { cn } from "@/lib/utils"
@@ -27,11 +28,41 @@ function modeAvailable(day: DayConfig, mode: LearnMode): boolean {
   return Boolean(day.learn_content.video_id)
 }
 
-const MODES: { id: LearnMode; label: string; icon: typeof FileText }[] = [
-  { id: "skrip", label: "Skrip & nada", icon: FileText },
-  { id: "gambar", label: "Gambar", icon: Image },
-  { id: "video", label: "Video", icon: Play },
-]
+const STR = {
+  ms: {
+    day: (n: number, w: number) => `Hari ${n} · Minggu ${w}`,
+    focus: "Fokus hari ini",
+    skills: "Kemahiran hari ini",
+    focusTag: "fokus",
+    howToLearn: "Cara belajar",
+    comingSoon: "Akan datang",
+    prepare: "Sediakan",
+    joyfulMoment: "Momen seronok",
+    duration: "Kira-kira 15 minit",
+    start: "Mula aktiviti",
+    modes: { skrip: "Skrip & nada", gambar: "Gambar", video: "Video" },
+  },
+  en: {
+    day: (n: number, w: number) => `Day ${n} · Week ${w}`,
+    focus: "Today's focus",
+    skills: "Today's skills",
+    focusTag: "focus",
+    howToLearn: "How to learn",
+    comingSoon: "Coming soon",
+    prepare: "What to prepare",
+    joyfulMoment: "A moment of joy",
+    duration: "About 15 minutes",
+    start: "Start activity",
+    modes: { skrip: "Script & tone", gambar: "Pictures", video: "Video" },
+  },
+} as const
+
+const MODE_ICONS: Record<LearnMode, typeof FileText> = {
+  skrip: FileText,
+  gambar: Image,
+  video: Play,
+}
+const MODE_IDS: LearnMode[] = ["skrip", "gambar", "video"]
 
 export function TodayCard({
   day,
@@ -50,6 +81,8 @@ export function TodayCard({
   onStart: (mode: LearnMode) => void
 }) {
   const [mode, setMode] = useState<LearnMode>("skrip")
+  const { lang } = useLang()
+  const t = STR[lang]
   const say = (s: string) => interpolate(s, vars)
 
   return (
@@ -57,22 +90,66 @@ export function TodayCard({
       {/* Header — Hari N · routine */}
       <div>
         <p className="font-display text-xs font-semibold uppercase tracking-widest text-primary">
-          Hari {day.day_number} · Minggu {day.week}
+          {t.day(day.day_number, day.week)}
         </p>
-        <h1 className="mt-1 font-display text-2xl font-bold leading-tight text-foreground">
+        {/* Routine as the small label, the day's purpose as the headline — the
+            same split as the dashboard card, so the two screens agree. */}
+        <p className="mt-1 font-display text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
           {say(day.title)}
+        </p>
+        <h1 className="mt-0.5 font-display text-2xl font-bold leading-tight text-foreground">
+          {say(day.subtitle)}
         </h1>
       </div>
 
       {/* Focus line — the ONE thing the parent works on today (G1 leading) */}
       <Card className="border-primary/30 bg-primary/5 p-4">
         <p className="text-xs font-semibold uppercase tracking-wide text-primary">
-          Fokus hari ini
+          {t.focus}
         </p>
         <p className="mt-1 text-sm font-medium leading-relaxed text-foreground">
           {say(day.focus_line)}
         </p>
       </Card>
+
+      {/* KEMAHIRAN HARI INI — the toolkit.
+          The SLT document lists SEVERAL techniques in play each day, then narrows
+          to ONE that is actually measured ("[FOKUS HARI INI — satu perkara
+          sahaja]"). Showing only the focus hid the other two from the parent, who
+          is still meant to be USING them — they just aren't being graded on them.
+
+          `focus_skill` marks the graded one, so the relationship between the two is
+          visible rather than something the parent has to infer. */}
+      {day.skills_today.length > 0 && (
+        <section>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {t.skills}
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {day.skills_today.map((skill) => {
+              const graded = skill === day.focus_skill
+              return (
+                <span
+                  key={skill}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold",
+                    graded
+                      ? "border-primary/40 bg-primary/10 text-primary"
+                      : "border-border bg-card text-muted-foreground"
+                  )}
+                >
+                  {skill}
+                  {graded && (
+                    <span className="rounded-full bg-primary/15 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide">
+                      {t.focusTag}
+                    </span>
+                  )}
+                </span>
+              )
+            })}
+          </div>
+        </section>
+      )}
 
       {/* Maya's framing of the day */}
       <MayaBubble>{say(day.sub_goal)}</MayaBubble>
@@ -80,10 +157,12 @@ export function TodayCard({
       {/* Mode switcher */}
       <div>
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Cara belajar
+          {t.howToLearn}
         </p>
         <div className="grid grid-cols-3 gap-2">
-          {MODES.map(({ id, label, icon: Icon }) => {
+          {MODE_IDS.map((id) => {
+            const Icon = MODE_ICONS[id]
+            const label = t.modes[id]
             const ready = assetsReady && modeAvailable(day, id)
             const active = mode === id
             return (
@@ -104,7 +183,7 @@ export function TodayCard({
                 <span className="text-[11px] font-semibold leading-tight">{label}</span>
                 {!ready && (
                   <span className="text-[9px] font-medium text-muted-foreground">
-                    Akan datang
+                    {t.comingSoon}
                   </span>
                 )}
               </button>
@@ -116,7 +195,7 @@ export function TodayCard({
       {/* Sediakan — the prep items for today */}
       <section>
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Sediakan
+          {t.prepare}
         </p>
         <ul className="space-y-1.5">
           {day.prep_items.map((item) => (
@@ -134,7 +213,7 @@ export function TodayCard({
       {/* Momen seronok — shared enjoyment cue */}
       <Card className="border-neon-cyan/30 bg-neon-cyan/5 p-4">
         <p className="text-xs font-semibold uppercase tracking-wide text-neon-cyan">
-          Momen seronok
+          {t.joyfulMoment}
         </p>
         <p className="mt-1 text-sm leading-relaxed text-foreground">
           {say(day.shared_enjoyment)}
@@ -143,11 +222,11 @@ export function TodayCard({
 
       <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
         <Clock className="size-3.5" />
-        <span>Kira-kira 15 minit</span>
+        <span>{t.duration}</span>
       </div>
 
       <Button size="lg" className="w-full" onClick={() => onStart(mode)}>
-        Mula aktiviti
+        {t.start}
       </Button>
     </div>
   )

@@ -19,6 +19,7 @@ import { supabase } from "@/lib/supabase"
 import {
   type ChildAgeBucket,
   type Diagnosis,
+  type HomeLanguage,
   type ParentAgeBucket,
   type Relationship,
   type ScreeningAnswer,
@@ -29,6 +30,7 @@ export interface DraftAnswers {
   childAge?: ChildAgeBucket
   relationship?: Relationship
   parentAge?: ParentAgeBucket
+  homeLanguage?: HomeLanguage
   q1?: ScreeningAnswer
   q2?: ScreeningAnswer
   q3?: ScreeningAnswer
@@ -50,6 +52,7 @@ export interface DraftIdentity {
   childAgeOther?: string
   panggilanOther?: string
   parentAgeOther?: string
+  homeLanguageOther?: string
   diagnosisOther?: string
 }
 
@@ -80,6 +83,7 @@ export async function saveDraft(
   if (identity.childAgeOther) otherTexts.child_age = identity.childAgeOther
   if (identity.panggilanOther) otherTexts.panggilan = identity.panggilanOther
   if (identity.parentAgeOther) otherTexts.parent_age = identity.parentAgeOther
+  if (identity.homeLanguageOther) otherTexts.home_language = identity.homeLanguageOther
   if (identity.diagnosisOther) otherTexts.diagnosis = identity.diagnosisOther
 
   const hasIdentity =
@@ -131,6 +135,7 @@ export async function loadDraft(): Promise<Draft | null> {
       childAgeOther: other.child_age,
       panggilanOther: other.panggilan,
       parentAgeOther: other.parent_age,
+      homeLanguageOther: other.home_language,
       diagnosisOther: other.diagnosis,
     },
   }

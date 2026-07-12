@@ -465,6 +465,8 @@ const FALLBACK_PROFILE: Profile = {
 
 export default function DashboardHub({
   profile,
+  sltBanner = false,
+  onDismissSlt,
   goal,
   routines = [],
   activities = [],
@@ -476,6 +478,10 @@ export default function DashboardHub({
   onAccountDeleted,
 }: {
   profile?: Profile
+  /** Show the SLT recommendation (spec §5.1). Latest screening = variant B. */
+  sltBanner?: boolean
+  /** Parent closed it. Stays closed until a D7/D14 re-screen flags again. */
+  onDismissSlt?: () => void
   /** Primary goal code (G1–G10) the parent picked after profiling. */
   goal?: string
   /** Routine codes (R1–R10) the parent selected during onboarding. */
@@ -647,6 +653,8 @@ export default function DashboardHub({
             <ActivityLibrary
               childStage={profile?.stage}
               relationship={profile?.relationship}
+              sltBanner={sltBanner}
+              onDismissSlt={onDismissSlt}
               // {anak} / {panggilan} — spoken aloud in every 14-day script line.
               childName={profile?.childName}
               panggilan={profile?.panggilan}
