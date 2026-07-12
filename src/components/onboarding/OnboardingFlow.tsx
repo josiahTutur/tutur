@@ -94,6 +94,30 @@ type Step =
 const PART1: Step[] = ["A2", "A3", "A4", "A5", "A6"]        // about you and your child
 const PART2: Step[] = ["A7", "A8", "A9", "A10", "A11", "A12"] // soalan ringkas tentang {anak}
 
+/**
+ * Character limits for every free-text field.
+ *
+ * Sized so the text stays inside the box rather than scrolling out of view. The
+ * narrowest phone (320px) fits ~30 characters in the input at 16px; 70% of that
+ * is ~21, which is the ceiling these are set against.
+ *
+ * `diagnosis` is the deliberate exception: a real condition name ("Masalah
+ * pertuturan") needs the room, and truncating a parent's answer about their
+ * child's diagnosis is worse than letting it scroll.
+ */
+const MAX_LEN = {
+  childNickname: 20,
+  parentName: 24,
+  /** Spoken aloud in every activity script — short by necessity, not just by UI. */
+  panggilan: 20,
+  diagnosis: 40,
+  /** Ages are 1–2 digits. Numeric-only, so no unit text to fit. */
+  age: 2,
+} as const
+
+/** Strip everything that isn't a digit. Used by the two age fields. */
+const digitsOnly = (v: string) => v.replace(/\D/g, "")
+
 const SCREENING_OPTS = (["kerap", "kadang", "jarang"] as ScreeningAnswer[]).map((v) => ({
   value: v,
   label: SCREENING_LABELS[v],
@@ -375,6 +399,7 @@ export function OnboardingFlow({
             <TextQuestion
               question="Sebelum kita mula — siapa nama panggilan anak anda?"
               placeholder="cth: Adam"
+              maxLength={MAX_LEN.childNickname}
               value={anak}
               onChange={setAnak}
               onSubmit={() => go(1)}
@@ -394,7 +419,9 @@ export function OnboardingFlow({
                 { value: "lain", label: "Lain-lain" },
               ]}
               otherValue={childAgeOther}
-              otherPlaceholder={`Nyatakan umur ${name}`}
+              otherPlaceholder="cth: 5 (tahun)"
+              otherMaxLength={MAX_LEN.age}
+              otherNumeric
               onOtherChange={setChildAgeOther}
               onPick={(v) => {
                 setChildAge(v as ChildAgeBucket)
@@ -408,7 +435,7 @@ export function OnboardingFlow({
             <TextQuestion
               question="Dan anda? Apa nama anda?"
               placeholder="cth: Siti"
-              answerHint="Ini akaun anda — ibu bapa yang guna Tutur bersama anak."
+              maxLength={MAX_LEN.parentName}
               value={parentName}
               onChange={setParentName}
               onSubmit={() => go(1)}
@@ -428,7 +455,9 @@ export function OnboardingFlow({
                 { value: "lain", label: "Lain-lain" },
               ]}
               otherValue={panggilanOther}
-              otherPlaceholder={`Apa ${name} panggil anda? (cth: Mak Long)`}
+              otherHint={`Apa ${name} panggil anda?`}
+              otherPlaceholder="cth: Mak Long"
+              otherMaxLength={MAX_LEN.panggilan}
               onOtherChange={setPanggilanOther}
               onPick={(v) => {
                 setRelationship(v as Relationship)
@@ -441,7 +470,6 @@ export function OnboardingFlow({
           {step === "A6" && (
             <ChoiceQuestion
               question="Berapa umur anda?"
-              answerHint="Ini membantu kami memahami keluarga Tutur — tidak akan dikongsi."
               cols={2}
               value={parentAge}
               options={[
@@ -452,7 +480,9 @@ export function OnboardingFlow({
                 { value: "lain", label: "Lain-lain" },
               ]}
               otherValue={parentAgeOther}
-              otherPlaceholder="Nyatakan umur anda"
+              otherPlaceholder="cth: 58"
+              otherMaxLength={MAX_LEN.age}
+              otherNumeric
               onOtherChange={setParentAgeOther}
               onPick={(v) => {
                 setParentAge(v as ParentAgeBucket)
@@ -516,6 +546,7 @@ export function OnboardingFlow({
               ]}
               otherValue={diagnosisOther}
               otherPlaceholder="Nyatakan diagnosis"
+              otherMaxLength={MAX_LEN.diagnosis}
               onOtherChange={setDiagnosisOther}
               onPick={(v) => {
                 setQ6(v as Diagnosis)
@@ -813,24 +844,38 @@ const INPUT_CLASS =
   "w-full rounded-2xl border-[1.5px] border-border bg-muted px-4 py-3.5 text-base text-foreground outline-none transition placeholder:text-muted-foreground focus:border-primary focus:[box-shadow:var(--ring-focus)]"
 
 function TextQuestion({
-  question, hint, answerHint, placeholder, value, onChange, onSubmit,
+  question, hint, answerHint, placeholder, value, maxLength, numeric = false,
+  onChange, onSubmit,
 }: {
   question: string
   hint?: string
   answerHint?: string
   placeholder: string
   value: string
+  maxLength: number
+  /** Digits only, with a numeric keypad on mobile. */
+  numeric?: boolean
   onChange: (v: string) => void
   onSubmit: () => void
 }) {
   return (
     <QuestionShell question={question} hint={hint} answerHint={answerHint}>
+      {/* NO autoFocus. Landing on a question with the keyboard already up covers
+          half the screen before the parent has even read what's being asked —
+          and on these two screens the question IS the whole point. They tap the
+          field when they're ready, and the keyboard comes up then. */}
       <input
-        autoFocus
         type="text"
+        inputMode={numeric ? "numeric" : "text"}
+        // `maxLength` alone is not enforcement — a paste or an IME can still get
+        // past it. Filtering in onChange is what actually holds.
+        maxLength={maxLength}
         value={value}
         placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => {
+          const next = numeric ? digitsOnly(e.target.value) : e.target.value
+          onChange(next.slice(0, maxLength))
+        }}
         onKeyDown={(e) => e.key === "Enter" && value.trim() && onSubmit()}
         className={INPUT_CLASS}
       />
@@ -845,14 +890,27 @@ function TextQuestion({
 }
 
 function ChoiceQuestion({
-  question, hint, answerHint, footer, cols, options, value,
-  otherValue, otherPlaceholder, onOtherChange, onPick, onOtherSubmit,
+  question, hint, answerHint, otherHint, footer, cols, options, value,
+  otherValue, otherPlaceholder, otherMaxLength, otherNumeric = false,
+  onOtherChange, onPick, onOtherSubmit,
 }: {
   question: string
   hint?: string
   answerHint?: string
+  /**
+   * Shown above the "Lain-lain" text field ONLY — not above the option cards.
+   *
+   * A placeholder is the wrong place for a question: it truncates on a narrow
+   * phone, and it vanishes the moment the parent starts typing. Anything they
+   * actually need to READ belongs above the box.
+   */
+  otherHint?: string
   footer?: string
   cols: 1 | 2
+  /** Character cap on the "Lain-lain" field. */
+  otherMaxLength: number
+  /** "Lain-lain" accepts digits only (the two age questions). */
+  otherNumeric?: boolean
   options: { value: string; label: string }[]
   /**
    * The already-chosen answer, if any. REQUIRED for going back and for resuming
@@ -875,14 +933,22 @@ function ChoiceQuestion({
   // advance on the catch-all alone, or the value would be meaningless.
   if (otherActive) {
     return (
-      <QuestionShell question={question} hint={hint} answerHint={answerHint} footer={footer}>
+      <QuestionShell question={question} hint={hint} answerHint={otherHint ?? answerHint} footer={footer}>
+        {/* Also no autoFocus — it would fire on MOUNT, which means resuming into a
+            question whose answer was "Lain-lain" would pop the keyboard before the
+            parent had read anything. Focus is instead triggered by the tap handler
+            below, so it only happens when they actively ask to type. */}
         <input
           ref={inputRef}
-          autoFocus
           type="text"
+          inputMode={otherNumeric ? "numeric" : "text"}
+          maxLength={otherMaxLength}
           value={otherValue}
           placeholder={otherPlaceholder}
-          onChange={(e) => onOtherChange(e.target.value)}
+          onChange={(e) => {
+            const next = otherNumeric ? digitsOnly(e.target.value) : e.target.value
+            onOtherChange(next.slice(0, otherMaxLength))
+          }}
           onKeyDown={(e) => e.key === "Enter" && otherValue.trim() && onOtherSubmit()}
           className={INPUT_CLASS}
         />
@@ -1057,7 +1123,7 @@ function ConfidenceQuestion({
   return (
     <QuestionShell
       question={`Sejauh mana yakin anda SEKARANG untuk membimbing ${name} berkomunikasi?`}
-      hint="Satu soalan terakhir. Kita banding semula pada Hari 7 dan Hari 14."
+      hint="Satu soalan terakhir."
     >
       <div className="flex justify-between gap-2">
         {[1, 2, 3, 4, 5].map((n) => (
