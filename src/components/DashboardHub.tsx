@@ -647,6 +647,9 @@ export default function DashboardHub({
             <ActivityLibrary
               childStage={profile?.stage}
               relationship={profile?.relationship}
+              // {anak} / {panggilan} — spoken aloud in every 14-day script line.
+              childName={profile?.childName}
+              panggilan={profile?.panggilan}
               routines={routines}
               activityCodes={activities}
               records={records}

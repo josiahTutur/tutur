@@ -12,6 +12,13 @@ export interface Profile {
   guardianName: string
   relationship: string
   guardianAge: string
+  /**
+   * {panggilan} — what the child actually CALLS this parent ("Ibu", "Nenek",
+   * or something custom like "Mak Long"). Spoken aloud in every 14-day activity
+   * script, so it can't be derived from `relationship`: a "Lain-lain" parent
+   * types their own.
+   */
+  panggilan?: string
   /** Communication stage 1–5 from the profiling analysis. */
   stage: number
   email: string

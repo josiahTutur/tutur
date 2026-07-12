@@ -172,15 +172,18 @@ const ms = {
     badge: "Keluarga Pengasas",
     // Page 1 (image has no text — shown as real copy)
     p1Title: "Selamat datang ke keluarga Tutur 💜",
-    p1Body:
-      "Anda baru sahaja mengambil satu langkah berani untuk anak anda — dan itu sudah pun bermakna.",
+    // Body is split so the closing phrase can carry the violet accent that used
+    // to belong to the "— Maya" signature (now removed).
+    p1Body: "Anda baru sahaja mengambil satu langkah berani untuk anak anda —",
+    p1Accent: "dan itu sudah pun bermakna.",
     signature: "— Maya",
     // Page 2 (vision)
     p2Badge: "Teman AI",
     p2Title: "Setiap anak ada suara",
-    p2Body:
-      "Ia cuma perlukan sedikit ruang, sedikit masa, dan seorang teman di sisi.",
-    // Page 3 (founding benefits, shown below the badge image)
+    p2Body: "Ia cuma perlukan sedikit ruang, sedikit masa,",
+    p2Accent: "dan seorang teman di sisi.",
+    // Page 3 (founding benefits) — retired from onboarding, kept for the legacy
+    // Welcome component which is no longer routed to.
     p3Badge: "Manfaat Pengasas",
     benefitsTitle: "Ini hak istimewa anda sebagai keluarga pengasas:",
     benefits: [
@@ -411,13 +414,13 @@ const en: Dict = {
   welcome: {
     badge: "Founding Family",
     p1Title: "Welcome to the Tutur family 💜",
-    p1Body:
-      "You've just taken a brave step for your child — and that already matters.",
+    p1Body: "You've just taken a brave step for your child —",
+    p1Accent: "and that already matters.",
     signature: "— Maya",
     p2Badge: "AI Companion",
     p2Title: "Every child has a voice",
-    p2Body:
-      "It just needs a little space, a little time, and someone beside them.",
+    p2Body: "It just needs a little space, a little time,",
+    p2Accent: "and someone beside them.",
     p3Badge: "Founders Benefits",
     benefitsTitle: "Here's what's yours as a founding family:",
     benefits: [

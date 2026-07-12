@@ -11,6 +11,10 @@ import {
   type StageCode,
 } from "@/lib/activities"
 import ProgressCalendar from "@/components/ProgressCalendar"
+import { DayPlayer } from "@/components/day/DayPlayer"
+import { TodaysActivityCard } from "@/components/day/TodaysActivityCard"
+import { dayConfig } from "@/content/days"
+import { type Vars } from "@/lib/interpolate"
 import { formatDuration } from "@/lib/progress"
 import { getAacVoice } from "@/lib/voice"
 import {
@@ -247,6 +251,8 @@ export interface ActivityRecord {
 export default function ActivityLibrary({
   childStage,
   relationship = "Ibu Bapa",
+  childName,
+  panggilan,
   routines = [],
   activityCodes = [],
   records,
@@ -255,6 +261,10 @@ export default function ActivityLibrary({
   childStage?: number
   /** Guardian's relationship to the child (e.g. "Bapa"); labels the guidance. */
   relationship?: string
+  /** {anak} — the child's nickname, spoken in every 14-day script line. */
+  childName?: string
+  /** {panggilan} — what the child calls this parent ("Ibu", "Nenek", "Mak Long"). */
+  panggilan?: string
   /** Routine codes the parent selected — only these activities are shown. */
   routines?: string[]
   /** Activity codes the parent curated during onboarding — scopes the catalogue. */
@@ -271,6 +281,23 @@ export default function ActivityLibrary({
 
   const [routineFilter, setRoutineFilter] = useState<string>("all")
   const [openCode, setOpenCode] = useState<string | null>(null)
+
+  // ── The 14-day programme ────────────────────────────────────────────────
+  // Open = the day player is running full-screen over the library.
+  const [dayOpen, setDayOpen] = useState(false)
+
+  // Which content day the parent is on. There is no day_session table yet, so
+  // "today" is simply Day 1 for everyone — this becomes a real lookup in Phase 2.
+  const today = dayConfig(1)
+
+  const dayVars: Vars = {
+    anak: childName?.trim() || "anak anda",
+    panggilan: panggilan?.trim() || "Ibu",
+    // {mainan} is unknown until the child picks a toy on Day 1 (screen C5, not
+    // built). Left undefined on purpose so the raw token shows if content
+    // references it too early — a content bug we want visible, not papered over.
+    mainan: undefined,
+  }
   // The activity the parent is currently on (last opened) — gets the orange
   // border so they can see which one they picked, separate from "completed".
   const [focusedCode, setFocusedCode] = useState<string | null>(null)
@@ -322,6 +349,16 @@ export default function ActivityLibrary({
             todaySeconds={todaySeconds}
             samplePast={false}
             collapsible
+          />
+
+          {/* ── AKTIVITI HARI INI · the 14-day programme ──────────────────
+              Sits between the calendar and the picker, and will eventually
+              REPLACE the picker. Both coexist during the pilot so the old flow
+              stays testable. */}
+          <TodaysActivityCard
+            day={today}
+            vars={dayVars}
+            onOpen={() => setDayOpen(true)}
           />
 
           <p className="text-sm text-muted-foreground">
@@ -400,6 +437,19 @@ export default function ActivityLibrary({
           }
           onClose={() => setOpenCode(null)}
         />
+      )}
+
+      {/* The 14-day day player — full-screen over the library.
+          Nothing it produces is persisted yet: there is no day_session table,
+          so a completed Day 1 leaves no trace. That lands in Phase 2. */}
+      {dayOpen && today?.kind === "activity" && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-background">
+          <DayPlayer
+            day={today}
+            vars={dayVars}
+            onExit={() => setDayOpen(false)}
+          />
+        </div>
       )}
     </div>
   )

@@ -8,77 +8,65 @@ import {
   loadMaintenance,
   loadOnboarding,
   recordLoginDay,
-  saveOnboarding,
   saveProfile,
 } from "@/lib/db"
 import { MAINTENANCE } from "@/lib/config"
 import {
-  loadProgress,
   saveProgress,
   clearProgress,
   isResumableView,
 } from "@/lib/onboardingProgress"
 import Intro from "@/components/Intro"
 import Auth from "@/components/Auth"
-import Welcome, { clearWelcomeProgress } from "@/components/Welcome"
-import StageIntro, { clearStageIntroProgress } from "@/components/StageIntro"
+import { clearWelcomeProgress } from "@/components/Welcome"
+import { clearStageIntroProgress } from "@/components/StageIntro"
 import JoinChild from "@/components/JoinChild"
-import Chat, { clearChatProgress } from "@/components/Chat"
-import ProfilingResults from "@/components/ProfilingResults"
-import GoalSelection from "@/components/GoalSelection"
-import RoutineSelection from "@/components/RoutineSelection"
-import ActivitySelection from "@/components/ActivitySelection"
+import { clearChatProgress } from "@/components/Chat"
 import DashboardHub from "@/components/DashboardHub"
 import AccountDeleted from "@/components/AccountDeleted"
+import { PilotPreview } from "@/components/day/PilotPreview"
+import {
+  OnboardingFlow,
+  type OnboardingResult,
+} from "@/components/onboarding/OnboardingFlow"
+import {
+  loadPilotOnboarding,
+  savePilotOnboarding,
+  PILOT_DEFAULTS,
+} from "@/lib/pilotDb"
+import {
+  clearDraft,
+  loadDraft,
+  saveDraft,
+  type Draft,
+} from "@/lib/onboardingDraft"
 import type { Profile } from "@/lib/types"
-
-// Build the profile from the 20 profiling answers. Index mapping (see Chat.tsx):
-//   [0] child age · [1] child name · [2] parent name · [3] relationship · [4] parent age
-function profileFromAnswers(answers: string[], email: string): Profile {
-  return {
-    childAge: answers[0] ?? "",
-    childName: answers[1] ?? "",
-    guardianName: answers[2] ?? "",
-    relationship: answers[3] ?? "",
-    guardianAge: answers[4] ?? "",
-    stage: 1, // replaced once profiling computes the real stage
-    email,
-    profiledAt: new Date().toISOString().slice(0, 10),
-  }
-}
 
 /**
  * Global view router for Tutur.
  *
- * Kept intentionally simple with a single `useState` so the whole app flow
- * stays in one place while the product is still pre-backend. Swap this for a
- * real router (e.g. React Router / TanStack Router) once URLs & deep-linking
- * are needed.
+ * A single `useState` — deliberately. Swap for a real router once URLs and
+ * deep-linking are needed.
  *
- * Flow:  intro ─▶ auth ─▶ welcome ─▶ stageIntro ─▶ chat (AI profiling)
- *        ─▶ results ─▶ goals ─▶ routines ─▶ activities ─▶ hub
+ * Flow:  intro ─▶ auth ─▶ onboarding (A1–A14) ─▶ hub
  *
- * `stageIntro` teaches the 5 communication stages, then forks: the parent either
- * picks their child's stage manually (→ straight to the hub) or takes the
- * 15-question assessment (→ chat → results → goals…).
+ * ── WHAT CHANGED, AND WHY ────────────────────────────────────────────────
+ * The old chain (welcome → stageIntro → chat → results → goals → routines →
+ * activities) assessed the child into a STAGE and served content per-stage. The
+ * 14-day pilot is organised the other way round: a 6-question SCREENING that
+ * only decides whether to recommend an SLT, then fixed per-day content.
  *
- * After the communication-stage analysis (results), the parent picks a primary
- * goal (goals), their daily routines (routines), and the intervention
- * activities (activities) — all three anchor Maya — then lands on the
- * DashboardHub.
+ * So the stage instrument is gone from the flow. `StageIntro`, `Chat`,
+ * `ProfilingResults`, `GoalSelection`, `RoutineSelection` and `ActivitySelection`
+ * still exist on disk and still compile — they are simply no longer routed to,
+ * pending a final call on whether to keep them (see docs/PILOT_EXECUTION_PLAN.md
+ * §2b#4). Their localStorage stores are still cleared on sign-out, so a user who
+ * was mid-flow when this shipped doesn't carry stale state forever.
+ *
+ * The hub still wants a stage/goal/routines/activities, so onboarding seeds
+ * PILOT_DEFAULTS. That stage is FAKE — nothing measures it. See pilotDb.ts.
  */
-export type View =
-  | "intro"
-  | "auth"
-  | "welcome"
-  | "join"
-  | "stageIntro"
-  | "chat"
-  | "results"
-  | "goals"
-  | "routines"
-  | "activities"
-  | "hub"
+export type View = "intro" | "auth" | "onboarding" | "join" | "hub"
 
 /** Read an invite code from the URL (?code=… or ?join=…), if present. */
 function readInviteCodeFromUrl(): string | null {
@@ -88,6 +76,15 @@ function readInviteCodeFromUrl(): string | null {
     return c ? c.trim() : null
   } catch {
     return null
+  }
+}
+
+/** `?pilot=1` → render the 14-day day-player skeleton instead of the live app. */
+function readPilotPreview(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).has("pilot")
+  } catch {
+    return false
   }
 }
 
@@ -116,6 +113,8 @@ export default function App() {
 
   // A Google sign-in that bounced back with an error (captured from the URL).
   const [oauthError] = useState<boolean>(readOAuthError)
+  // `?pilot=1` — the day-player skeleton. Read once; see the render guard below.
+  const [pilotPreview] = useState<boolean>(readPilotPreview)
 
   // Runtime maintenance flag (admin-toggled) — OR'd with the build-time env flag.
   const [remoteMaintenance, setRemoteMaintenance] = useState(false)
@@ -125,16 +124,18 @@ export default function App() {
   // farewell (no nav, no button) shown over everything.
   const [accountDeleted, setAccountDeleted] = useState(false)
 
-  // Raw answers from the 16 profiling questions, handed to the scoring engine.
-  const [profilingAnswers, setProfilingAnswers] = useState<string[]>([])
-
-  // The 5 answers collected in the founding welcome — carried into profiling so
-  // those first questions are never re-asked.
-  const [welcomeAnswers, setWelcomeAnswers] = useState<string[]>([])
-
-  // Assembled child/guardian profile. Undefined until set (via the demo
-  // shortcut today; via real sign-in + profiling once those are wired up).
+  // Assembled child/guardian profile, rebuilt from the DB on boot.
   const [profile, setProfile] = useState<Profile>()
+
+  // Set while A1–A14 is being written to the backend, so the CTA can't be
+  // double-tapped into two children.
+  const [savingOnboarding, setSavingOnboarding] = useState(false)
+  const [onboardingError, setOnboardingError] = useState<string | null>(null)
+
+  // An interrupted onboarding, restored from the server (NOT localStorage — the
+  // answers contain identity; see lib/onboardingDraft.ts). Hydrated during boot,
+  // before the flow first renders, so it never flashes step 1 then jumps.
+  const [draft, setDraft] = useState<Draft | null>(null)
 
   // Primary developmental goal (G1–G10) the parent picked after profiling.
   // Anchors the intervention pathway and is editable later from Tetapan.
@@ -195,31 +196,59 @@ export default function App() {
         })
       }
 
-      // Onboarding fully done (activities saved) → the hub is authoritative.
-      if (ob && ob.activities.length > 0) {
-        setGoal(ob.goal)
-        setRoutines(ob.routines)
-        setActivities(ob.activities)
-        clearProgress() // mirror is stale now; hub is the source of truth
+      // Did they finish the NEW onboarding (A1–A14)? That writes children.onboarded_at.
+      const pilot = await loadPilotOnboarding()
+      if (cancelled) return
+
+      // Two independent ways to be "done", and both must send you to the hub:
+      //
+      //   · pilot        — finished A1–A14 (the current flow)
+      //   · legacy       — finished the OLD chain before this shipped, which is
+      //                    recorded as a non-empty `activities` list
+      //
+      // Missing the legacy case would drag every existing parent back through
+      // onboarding they already completed, so it is checked explicitly.
+      const legacyDone = !!ob && ob.activities.length > 0
+
+      if (pilot || legacyDone) {
+        // The 14-day scripts SAY the nickname and the panggilan out loud, so they
+        // must come from the authoritative source (vault + children), not from the
+        // legacy `profiles` copy which a pre-pilot user may not have at all.
+        if (pilot) {
+          setProfile((p) => ({
+            childName: pilot.anak || p?.childName || "",
+            childAge: p?.childAge ?? "",
+            guardianName: p?.guardianName ?? "",
+            relationship: p?.relationship ?? "",
+            guardianAge: p?.guardianAge ?? "",
+            panggilan: pilot.panggilan,
+            stage: p?.stage ?? PILOT_DEFAULTS.stage,
+            email: p?.email ?? "",
+            profiledAt: p?.profiledAt ?? "",
+          }))
+        }
+        setGoal(ob?.goal ?? PILOT_DEFAULTS.goal)
+        setRoutines(ob?.routines?.length ? ob.routines : [...PILOT_DEFAULTS.routines])
+        setActivities(
+          ob?.activities?.length ? ob.activities : [...PILOT_DEFAULTS.activities]
+        )
+        clearProgress() // any local mirror is stale now; the DB is authoritative
         setView((v) => (v === "intro" || v === "auth" ? "hub" : v))
         return
       }
 
-      // Otherwise resume from locally-saved progress (survives a mid-onboarding
-      // refresh, incl. a manual stage pick that jumped straight to the hub).
-      const local = loadProgress()
-      if (local) {
-        setWelcomeAnswers(local.welcomeAnswers ?? [])
-        setProfilingAnswers(local.profilingAnswers ?? [])
-        if (local.goal) setGoal(local.goal)
-        if (local.routines) setRoutines(local.routines)
-        if (local.activities) setActivities(local.activities)
-        setView((v) => (v === "intro" || v === "auth" ? local.view : v))
-        return
-      }
+      // Everyone else starts (or resumes) onboarding. The old localStorage mirror
+      // is NOT honoured: the views it points at ("chat", "goals", …) no longer
+      // exist, so resuming onto one would route into nothing.
+      clearProgress()
 
-      // New / unfinished member with no saved progress → start the welcome sector.
-      setView((v) => (v === "intro" || v === "auth" ? "welcome" : v))
+      // Pull the server-side draft BEFORE showing the flow, so a returning parent
+      // lands on the screen they left rather than flashing A1 and jumping.
+      const d = await loadDraft()
+      if (cancelled) return
+      setDraft(d)
+
+      setView((v) => (v === "intro" || v === "auth" ? "onboarding" : v))
     }
 
     supabase.auth.getSession().then(async ({ data }) => {
@@ -276,29 +305,27 @@ export default function App() {
     }
   }, [oauthError])
 
-  // Mirror onboarding progress to localStorage so an accidental refresh resumes
-  // on the same screen. Only post-auth onboarding views are persisted.
+  // Mirror the current view to localStorage so a refresh resumes in place.
+  //
+  // Onboarding answers are deliberately NOT mirrored: they include the child's
+  // nickname, the parent's name, and screening responses. That is exactly the
+  // data the vault exists to protect (spec §3.1), and localStorage is readable
+  // by anything running on the origin. A refresh mid-onboarding restarts it —
+  // ~3 minutes — which is a fair price for not scattering identity around.
   useEffect(() => {
     if (booting || !isResumableView(view)) return
-    saveProgress({
-      view,
-      welcomeAnswers,
-      profilingAnswers,
-      goal,
-      routines,
-      activities,
-      stage: profile?.stage,
-    })
-  }, [
-    booting,
-    view,
-    welcomeAnswers,
-    profilingAnswers,
-    goal,
-    routines,
-    activities,
-    profile?.stage,
-  ])
+    saveProgress({ view, goal, routines, activities, stage: profile?.stage })
+  }, [booting, view, goal, routines, activities, profile?.stage])
+
+  // ── PILOT PREVIEW ────────────────────────────────────────────────────────
+  // The 14-day day-player skeleton (C1–C4), reachable at `?pilot=1`. It sits in
+  // front of the auth/session check on purpose: it has no backend, so there is
+  // nothing to authenticate against yet. Nothing below this line is affected,
+  // and the live app is untouched for every parent who doesn't type the flag.
+  //
+  // Remove this block once the day player replaces the current daily loop for
+  // real — see docs/PILOT_EXECUTION_PLAN.md, Phase 4.
+  if (pilotPreview) return <PilotPreview />
 
   // Splash while the session check runs, so a signed-in user never sees a flash
   // of the intro before landing on the hub.
@@ -313,52 +340,61 @@ export default function App() {
   // Terminal farewell — full-screen, over everything, after account deletion.
   if (accountDeleted) return <AccountDeleted />
 
-  // The goal/routine matrices and hub are full-bleed responsive layouts, so they
-  // render outside the mobile-width column used by the rest of the onboarding flow.
-  if (view === "goals") {
+  // ── ONBOARDING · A1–A14 ──────────────────────────────────────────────────
+  if (view === "onboarding") {
     return (
-      <GoalSelection
-        onComplete={(goalCode) => {
-          setGoal(goalCode)
-          setView("routines")
+      <OnboardingFlow
+        saving={savingOnboarding}
+        error={onboardingError}
+        initial={draft}
+        // One write per answered screen. Fire-and-forget: losing a draft write
+        // costs the parent resume, not progress — it must never block them.
+        onProgress={(step, answers, identity) => {
+          void saveDraft(step, answers, identity)
         }}
-      />
-    )
-  }
-  if (view === "routines") {
-    return (
-      <RoutineSelection
-        onComplete={(selected) => {
-          setRoutines(selected)
-          setView("activities")
-        }}
-        onBack={() => setView("goals")}
-      />
-    )
-  }
-  if (view === "activities") {
-    return (
-      <ActivitySelection
-        childStage={profile?.stage}
-        onComplete={async (selected) => {
-          setActivities(selected)
-          // Persist the finished onboarding so a refresh resumes on the hub.
-          try {
-            await saveOnboarding({
-              goal,
-              routines,
-              activities: selected,
-              stage: profile?.stage,
-            })
-          } catch {
-            /* offline / not signed in (demo) — fall through to the hub anyway */
+        onDone={async (r: OnboardingResult) => {
+          setSavingOnboarding(true)
+          setOnboardingError(null)
+
+          const res = await savePilotOnboarding(r)
+
+          if (!res.ok) {
+            // Do NOT advance on a failed write. Landing on a dashboard whose
+            // scripts have no {anak} to say is worse than showing the error and
+            // letting them retry — and the screening row would be lost silently.
+            // The draft is left intact, so nothing they typed is lost.
+            setSavingOnboarding(false)
+            setOnboardingError(res.error)
+            return
           }
+
+          // Durable record written — the transient draft has done its job.
+          // The vault row is NOT cleared: the nickname is real data now, spoken
+          // in every activity script.
+          await clearDraft()
+          setDraft(null)
+
+          setProfile({
+            childName: r.anak,
+            childAge: r.childAge,
+            guardianName: r.parentName,
+            relationship: r.relationship,
+            guardianAge: r.parentAge,
+            panggilan: r.panggilan, // spoken in every activity script
+            stage: PILOT_DEFAULTS.stage, // ⚠ fake — nothing measures this
+            email: userEmail,
+            profiledAt: new Date().toISOString().slice(0, 10),
+          })
+          setGoal(PILOT_DEFAULTS.goal)
+          setRoutines([...PILOT_DEFAULTS.routines])
+          setActivities([...PILOT_DEFAULTS.activities])
+          setSavingOnboarding(false)
           setView("hub")
         }}
-        onBack={() => setView("routines")}
       />
     )
   }
+
   if (view === "hub") {
     return (
       <DashboardHub
@@ -384,8 +420,6 @@ export default function App() {
           setGoal(undefined)
           setRoutines([])
           setActivities([])
-          setProfilingAnswers([])
-          setWelcomeAnswers([])
           setView("intro")
         }}
       />
@@ -419,24 +453,12 @@ export default function App() {
       />
     )
   }
-  // Founding welcome is a full-viewport, responsive layout (not the mobile column).
-  if (view === "welcome") {
-    return (
-      <Welcome
-        onComplete={(a) => {
-          setWelcomeAnswers(a)
-          setView("stageIntro")
-        }}
-        onJoinCode={() => setView("join")}
-      />
-    )
-  }
   // Co-parent joins a shared child with an invite code, then reloads onto the hub.
   if (view === "join") {
     return (
       <JoinChild
         initialCode={pendingCode ?? undefined}
-        onBack={() => setView("welcome")}
+        onBack={() => setView("onboarding")}
         onJoined={() => {
           clearWelcomeProgress()
           clearProgress()
@@ -447,55 +469,6 @@ export default function App() {
       />
     )
   }
-  // Communication-stage education + fork (also a full-viewport layout).
-  if (view === "stageIntro") {
-    return (
-      <StageIntro
-        onTakeQuestions={() => setView("chat")}
-        onPickStage={(stage) => {
-          // Manual pick: set the stage and jump straight to the dashboard.
-          const finalProfile: Profile = {
-            ...profileFromAnswers(welcomeAnswers, userEmail),
-            stage,
-          }
-          setProfile(finalProfile)
-          void saveProfile(finalProfile)
-          setView("hub")
-        }}
-      />
-    )
-  }
 
-  return (
-    <div className="relative mx-auto flex min-h-full w-full max-w-md flex-col overflow-hidden">
-      {view === "chat" && (
-        <Chat
-          startAnswers={welcomeAnswers}
-          persistKey="tutur.chat.v1"
-          onComplete={(answers) => {
-            setProfilingAnswers(answers)
-            // Capture the child/guardian details from the answers right away.
-            setProfile(profileFromAnswers(answers, userEmail))
-            setView("results")
-          }}
-        />
-      )}
-
-      {view === "results" && (
-        <ProfilingResults
-          answers={profilingAnswers}
-          onComplete={(stage) => {
-            // Finalise the profile with the computed stage and persist it.
-            const finalProfile: Profile = {
-              ...(profile ?? profileFromAnswers(profilingAnswers, userEmail)),
-              stage,
-            }
-            setProfile(finalProfile)
-            void saveProfile(finalProfile, profilingAnswers)
-            setView("goals")
-          }}
-        />
-      )}
-    </div>
-  )
+  return null
 }

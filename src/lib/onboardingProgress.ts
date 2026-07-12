@@ -14,36 +14,30 @@
 
 const KEY = "tutur.onboarding.v1"
 
-/** Post-auth onboarding views worth resuming to (never "intro"/"auth"). */
-export type OnboardingView =
-  | "welcome"
-  | "stageIntro"
-  | "chat"
-  | "results"
-  | "goals"
-  | "routines"
-  | "activities"
-  | "hub"
+/**
+ * Post-auth views worth resuming to (never "intro"/"auth").
+ *
+ * The old chain (welcome / stageIntro / chat / results / goals / routines /
+ * activities) is gone from the router, so it is gone from here too — a stale
+ * mirror pointing at "chat" would resume into a view that no longer renders.
+ */
+export type OnboardingView = "onboarding" | "hub"
 
-const RESUMABLE: OnboardingView[] = [
-  "welcome",
-  "stageIntro",
-  "chat",
-  "results",
-  "goals",
-  "routines",
-  "activities",
-  "hub",
-]
+const RESUMABLE: OnboardingView[] = ["onboarding", "hub"]
 
 export function isResumableView(v: string): v is OnboardingView {
   return (RESUMABLE as string[]).includes(v)
 }
 
+/**
+ * NOTE: no answers are stored here any more. Onboarding collects the child's
+ * nickname, the parent's name and screening responses — precisely the data the
+ * identity vault exists to protect (spec §3.1). localStorage is readable by
+ * anything on the origin, so it is the wrong place for it. A refresh
+ * mid-onboarding restarts it; that is the intended trade.
+ */
 export interface OnboardingProgress {
   view: OnboardingView
-  welcomeAnswers?: string[]
-  profilingAnswers?: string[]
   goal?: string
   routines?: string[]
   activities?: string[]

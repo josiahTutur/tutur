@@ -23,8 +23,8 @@ import { QUESTIONS } from "@/components/Chat"
 
 const FIVE = QUESTIONS.slice(0, 5)
 const INTRO_IMAGES = [
-  "/welcome/welcome-1.png",
-  "/welcome/welcome-2.png",
+  "/welcome/welcome-1a.png",
+  "/welcome/welcome-2a.png",
   "/welcome/welcome-3.png",
 ]
 const BENEFIT_ICONS = [Star, Gift, Stethoscope, KeyRound, Heart] as const
@@ -256,7 +256,8 @@ export default function Welcome({
 /*  Story pages (1–3)                                                          */
 /* -------------------------------------------------------------------------- */
 
-function StoryPage({
+/** Exported so the pilot onboarding reuses the SAME 3 story pages, not a clone. */
+export function StoryPage({
   step,
   w,
 }: {
@@ -287,32 +288,30 @@ function StoryPage({
         draggable={false}
       />
 
-      {/* Page 1 — welcome copy below the illustration */}
+      {/* Page 1 — welcome copy below the illustration.
+          The closing phrase carries the violet accent the "— Maya" signature
+          used to; the signature itself is gone. */}
       {step === 0 && (
         <div className="mt-6 text-center">
           <h1 className="font-display text-2xl font-bold tracking-tight lg:text-3xl">
             {w.p1Title}
           </h1>
           <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-muted-foreground lg:text-base">
-            {w.p1Body}
-          </p>
-          <p className="mt-3 text-sm font-semibold text-primary">
-            {w.signature}
+            {w.p1Body}{" "}
+            <span className="font-semibold text-primary">{w.p1Accent}</span>
           </p>
         </div>
       )}
 
-      {/* Page 2 — vision copy, styled to match page 1's description block */}
+      {/* Page 2 — vision copy, same accent treatment. */}
       {step === 1 && (
         <div className="mt-6 text-center">
           <h1 className="font-display text-2xl font-bold tracking-tight lg:text-3xl">
             {w.p2Title}
           </h1>
           <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-muted-foreground lg:text-base">
-            {w.p2Body}
-          </p>
-          <p className="mt-3 text-sm font-semibold text-primary">
-            {w.signature}
+            {w.p2Body}{" "}
+            <span className="font-semibold text-primary">{w.p2Accent}</span>
           </p>
         </div>
       )}
@@ -448,7 +447,8 @@ function QuestionPage({
 /*  Shared primary button                                                     */
 /* -------------------------------------------------------------------------- */
 
-function PrimaryButton({
+/** Exported so every pilot screen uses the SAME CTA — one button, one look. */
+export function PrimaryButton({
   children,
   onClick,
   disabled,
