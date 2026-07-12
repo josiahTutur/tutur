@@ -241,9 +241,19 @@ export default function Intro({
 }
 
 /* ------------------------------------------------------------------ *
- * Maintenance notice — shows the poster at /maintenance.png when present,
- * with a styled fallback if it isn't. The login button stays either way, so
- * existing users can always get in.
+ * Maintenance notice — Maya, mid-repair, above the message.
+ *
+ * The poster used to be either/or: if /maintenance.png loaded, the app showed
+ * ONLY the image, and t.maintenance.title/body appeared solely as a fallback.
+ * That worked when the words were baked into the artwork — but it also meant a
+ * Malay-first user was served an English poster, because a PNG can't be
+ * translated.
+ *
+ * Maya's poster is deliberately WORDLESS. The image illustrates; the app supplies
+ * the words, in the reader's own language. So the two now render together, and
+ * the icon fallback only covers the case where the image itself fails to load.
+ *
+ * The login button stays either way, so existing users can always get in.
  * ------------------------------------------------------------------ */
 
 function MaintenanceNotice({
@@ -257,49 +267,49 @@ function MaintenanceNotice({
 
   return (
     <>
-      {imgError ? (
-        <div
-          className="rounded-3xl border p-5 text-center"
-          style={{
-            background: "var(--color-brand-subtle)",
-            borderColor: "var(--border-subtle)",
-          }}
-        >
+      <div
+        className="rounded-3xl border p-5 text-center"
+        style={{
+          background: "var(--color-brand-subtle)",
+          borderColor: "var(--border-subtle)",
+        }}
+      >
+        {imgError ? (
+          // Artwork missing — fall back to the wrench glyph so the notice still
+          // reads as "under maintenance" and not as a broken page.
           <div
             className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl"
             style={{ background: "var(--surface-card)" }}
           >
-            <Wrench
-              className="h-6 w-6"
-              style={{ color: "var(--color-brand)" }}
-            />
+            <Wrench className="h-6 w-6" style={{ color: "var(--color-brand)" }} />
           </div>
-          <h2
-            className="text-base font-bold tracking-tight"
-            style={{
-              fontFamily: "var(--font-display)",
-              color: "var(--text-strong)",
-            }}
-          >
-            {t.maintenance.title}
-          </h2>
-          <p
-            className="mx-auto mt-2 max-w-xs text-sm"
-            style={{ color: "var(--text-body)" }}
-          >
-            {t.maintenance.body}
-          </p>
-        </div>
-      ) : (
-        <img
-          src="/maintenance.png"
-          alt={t.maintenance.title}
-          onError={() => setImgError(true)}
-          className="w-full select-none rounded-3xl"
-          draggable={false}
-          style={{ boxShadow: "var(--shadow-md)" }}
-        />
-      )}
+        ) : (
+          <img
+            src="/maintenance.png"
+            alt=""
+            onError={() => setImgError(true)}
+            className="mx-auto mb-4 w-full max-w-[280px] select-none rounded-2xl"
+            draggable={false}
+            aria-hidden
+          />
+        )}
+
+        <h2
+          className="text-base font-bold tracking-tight"
+          style={{
+            fontFamily: "var(--font-display)",
+            color: "var(--text-strong)",
+          }}
+        >
+          {t.maintenance.title}
+        </h2>
+        <p
+          className="mx-auto mt-2 max-w-xs text-sm"
+          style={{ color: "var(--text-body)" }}
+        >
+          {t.maintenance.body}
+        </p>
+      </div>
 
       <button
         type="button"

@@ -3,6 +3,30 @@
 @tailwind utilities;
 
 @layer base {
+  /* ── Full-height, no-bounce shell ────────────────────────────────────────
+     Onboarding must never scroll: every question, and the CTA, has to be
+     reachable without the parent hunting for it below the fold.
+
+     `overscroll-behavior: none` kills iOS rubber-banding and Android
+     pull-to-refresh, both of which make a fixed-height screen *feel* like it
+     scrolled — the page bounces, the parent thinks there's more content, and
+     the illusion is worse than real scrolling.
+
+     Note we do NOT set `overflow: hidden` on body: the dashboard genuinely does
+     need to scroll. Onboarding constrains itself instead (see useViewportHeight). */
+  html,
+  body,
+  #root {
+    height: 100%;
+    overscroll-behavior: none;
+  }
+
+  body {
+    /* Stops the page itself from scrolling behind a full-height screen while
+       still letting inner regions (the hub, the activity library) scroll. */
+    -webkit-overflow-scrolling: touch;
+  }
+
   :root {
     /* Tutur — light brand theme (Brand Book v1.0). White is the base,
        Tutur Violet is the accent. Values are HSL channels for Tailwind. */

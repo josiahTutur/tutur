@@ -3,7 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <!--
+      interactive-widget=resizes-content — when the on-screen keyboard opens, the
+      LAYOUT viewport shrinks so the page reflows above it, instead of the keyboard
+      simply covering the bottom of the screen. Without this, a text input pinned
+      to the bottom of a full-height layout becomes unreachable the moment it is
+      focused. Honoured by Chrome/Android; iOS is handled by useViewportHeight().
+    -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content"
+    />
     <meta name="theme-color" content="#FBFAFF" />
     <title>Tutur — Intervensi Pertuturan di Rumah</title>
     <!-- Apply the saved theme before first paint (no flash). Default = light. -->

@@ -23,10 +23,11 @@
  * ========================================================================== */
 
 import { useEffect, useRef, useState } from "react"
-import { ArrowLeft, ArrowRight, Check, Image as ImageIcon } from "lucide-react"
+import { ArrowLeft, ArrowRight, Check } from "lucide-react"
 
 import { PrimaryButton, StoryPage } from "@/components/Welcome"
 import { useT } from "@/lib/i18n"
+import { APP_HEIGHT, useViewportHeight } from "@/lib/useViewportHeight"
 import {
   type Draft,
   type DraftAnswers,
@@ -136,6 +137,10 @@ export function OnboardingFlow({
 }) {
   const t = useT()
   const w = t.welcome
+
+  // Publishes the REAL usable height (keyboard-aware) as --app-h. Onboarding is
+  // the one flow that must never scroll, so it owns this.
+  useViewportHeight()
 
   const a = initial?.answers
   const id = initial?.identity
@@ -274,10 +279,27 @@ export function OnboardingFlow({
   const isStory = step.startsWith("story")
   const storyStep = isStory ? Number(step.slice(5)) : 0
 
+  /**
+   * Question screens use a fixed-height, three-band layout (Maya + question at
+   * the top, answers pinned to the bottom) rather than a centred block. `progress`
+   * is non-null on exactly those screens, so it doubles as the switch.
+   */
+  const isQuestion = progress !== null
+
+  /** Screens that actually render a footer CTA. The rest auto-advance on tap. */
+  const hasFooterCta =
+    step === "maya" || isStory || step === "slt" || step === "A13" || step === "A14"
+
   return (
     <main
-      className="relative flex min-h-screen flex-col overflow-hidden"
-      style={{ background: "hsl(var(--background))" }}
+      // Sized off --app-h (see useViewportHeight): the real, keyboard-aware
+      // viewport height. NOT 100vh — that measures the screen as if the browser
+      // chrome were hidden, which is precisely what pushes a CTA out of reach.
+      //
+      // overflow-hidden is deliberate: nothing in onboarding may scroll. The
+      // bands inside shrink to fit instead.
+      className="relative flex flex-col overflow-hidden"
+      style={{ height: APP_HEIGHT, background: "hsl(var(--background))" }}
     >
       {/* Same soft violet backdrop as Welcome */}
       <div
@@ -325,13 +347,27 @@ export function OnboardingFlow({
 
       <div
         className={[
-          "relative flex flex-1 overflow-y-auto px-6 py-8",
-          // Image-first pages (the welcome story pages and the SLT credibility
-          // page) are top-aligned, exactly like Welcome 2. Question pages centre.
-          isStory || step === "slt" ? "items-start" : "items-center",
+          "relative flex min-h-0 flex-1 px-6",
+          isQuestion
+            ? // Question screens: stretch to fill, never scroll. The shell inside
+              // handles the top/bottom split.
+              "items-stretch py-4"
+            : // Everything else keeps the old behaviour: image-first pages are
+              // top-aligned like Welcome 2, the rest centre, and both may scroll.
+              [
+                "overflow-y-auto py-8",
+                isStory || step === "slt" ? "items-start" : "items-center",
+              ].join(" "),
         ].join(" ")}
       >
-        <div className="mx-auto w-full max-w-2xl">
+        <div
+          className={[
+            "mx-auto w-full max-w-2xl",
+            isQuestion && "flex h-full flex-col",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
           {step === "maya" && <MayaIntro />}
           {isStory && <StoryPage step={storyStep} w={w} />}
 
@@ -372,7 +408,7 @@ export function OnboardingFlow({
             <TextQuestion
               question="Dan anda? Apa nama anda?"
               placeholder="cth: Siti"
-              hint="Ini akaun anda — ibu bapa yang guna Tutur bersama anak."
+              answerHint="Ini akaun anda — ibu bapa yang guna Tutur bersama anak."
               value={parentName}
               onChange={setParentName}
               onSubmit={() => go(1)}
@@ -382,7 +418,6 @@ export function OnboardingFlow({
           {step === "A5" && (
             <ChoiceQuestion
               question={`Apa hubungan anda dengan ${name}?`}
-              hint="Digunakan dalam skrip aktiviti — cth: “Ibu letak tiga mainan”."
               cols={2}
               value={relationship}
               options={[
@@ -406,7 +441,7 @@ export function OnboardingFlow({
           {step === "A6" && (
             <ChoiceQuestion
               question="Berapa umur anda?"
-              hint="Ini membantu kami memahami keluarga Tutur — tidak akan dikongsi."
+              answerHint="Ini membantu kami memahami keluarga Tutur — tidak akan dikongsi."
               cols={2}
               value={parentAge}
               options={[
@@ -431,9 +466,9 @@ export function OnboardingFlow({
 
           {step === "A7" && (
             <ScreeningQuestion
-              intro={`Sekarang, 6 soalan ringkas tentang ${name}. Ini bukan diagnosis — jawapan anda membantu saya sesuaikan program.`}
               question={`Adakah ${name} kerap membuat pandangan mata dengan anda?`}
               value={q1}
+              footer="Ini bukan diagnosis — jawapan anda membantu Tutur sesuaikan program."
               onPick={(v) => { setQ1(v); go(1) }}
             />
           )}
@@ -507,8 +542,16 @@ export function OnboardingFlow({
         </div>
       </div>
 
-      {/* Footer CTA — same rounded-full primary button as the live onboarding. */}
-      <footer className="relative mx-auto w-full max-w-2xl px-6 pb-8 pt-2 lg:pb-12">
+      {/* Footer CTA — same rounded-full primary button as the live onboarding.
+          Auto-advancing choice screens have no CTA, so the footer would otherwise
+          reserve dead space at the bottom of an already height-constrained page.
+          `hasFooterCta` collapses it entirely on those screens. */}
+      <footer
+        className={[
+          "relative mx-auto w-full max-w-2xl shrink-0 px-6",
+          hasFooterCta ? "pb-8 pt-2 lg:pb-12" : "pb-4",
+        ].join(" ")}
+      >
         <div className="mx-auto max-w-md">
           {step === "maya" && (
             <PrimaryButton onClick={() => go(1)}>
@@ -606,26 +649,15 @@ function SltCredibility() {
         </span>
       </div>
 
-      {/* IMAGE PLACEHOLDER — 43:24, the exact aspect of the welcome illustrations
-          (1376 × 768), with their corner radius, drop shadow and full-bleed width.
-          To ship the real art, replace this <div> with:
-
-            <img src="/welcome/welcome-slt.png" alt=""
-                 className="w-full select-none rounded-3xl shadow-[0_16px_40px_-16px_hsl(258_60%_40%/0.4)]"
-                 draggable={false} />
-
-          Export it at 1376 × 768 so it sits flush with the pages either side. */}
-      <div
-        className="flex aspect-[43/24] w-full select-none items-center justify-center rounded-3xl border-2 border-dashed border-primary/25 bg-[hsl(var(--primary)/0.05)] shadow-[0_16px_40px_-16px_hsl(258_60%_40%/0.4)]"
-        aria-hidden
-      >
-        <div className="text-center">
-          <ImageIcon className="mx-auto h-8 w-8 text-primary/40" />
-          <p className="mt-2 text-xs font-semibold text-primary/50">
-            Imej akan datang · 1376 × 768
-          </p>
-        </div>
-      </div>
+      {/* Same treatment as the welcome illustrations — identical 1376 × 768 source,
+          corner radius, drop shadow and full-bleed width, so the three pages read
+          as one set. */}
+      <img
+        src="/welcome/credibilities.png"
+        alt=""
+        className="max-h-[34svh] w-full select-none rounded-3xl object-contain shadow-[0_16px_40px_-16px_hsl(258_60%_40%/0.4)]"
+        draggable={false}
+      />
 
       <div className="mt-6 text-center">
         <h1 className="font-display text-2xl font-bold tracking-tight lg:text-3xl">
@@ -645,31 +677,134 @@ function SltCredibility() {
   )
 }
 
+/**
+ * Maya asking. Illustration top-left, question in a speech bubble beside it.
+ *
+ * SIZE: 96px on phones, 128px from `sm`, 144px on large screens. Deliberately
+ * bigger than a typical chat avatar, because the artwork is a SCENE — she's
+ * holding a clipboard, writing, with papers at her feet and a question mark
+ * overhead. At the 64–72px of a normal avatar all of that compresses into a
+ * violet smudge, and you may as well not have drawn it.
+ *
+ * ART: /maya-ask.png — 500 × 500, transparent PNG. The lavender blob is part of
+ * the artwork, so the area around it MUST stay transparent; a white-backed export
+ * would render as a glaring square on a card, and worse on the dark theme.
+ *
+ * Her face sits ~34% down the frame, which is what the bubble's tail offset is
+ * tuned against. Re-export her at a different crop and the tail needs re-tuning.
+ */
+function MayaAsk({ question }: { question: string }) {
+  return (
+    <div className="flex items-start gap-2.5 sm:gap-3">
+      {/* Drops to 72px below 360px wide (iPhone SE and friends). At 96px the
+          illustration would squeeze the bubble to ~166px there, which turns a
+          long screening question into ten stacked lines. The art matters, but the
+          question matters more. */}
+      <img
+        src="/maya-ask.png"
+        alt=""
+        aria-hidden
+        draggable={false}
+        className="h-24 w-24 shrink-0 select-none max-[360px]:h-[72px] max-[360px]:w-[72px] sm:h-32 sm:w-32 lg:h-36 lg:w-36"
+      />
+
+      {/* Speech bubble with a real tail. Without the tail this reads as "text in a
+          box"; with it, Maya is visibly the one asking — which is the whole point
+          of putting her on the screen at all. */}
+      <div className="relative min-w-0 flex-1 self-start rounded-2xl border-[1.5px] border-border bg-card px-4 py-3.5 shadow-sm">
+        {/* A square rotated 45°, half-hidden behind the bubble. Only its left and
+            bottom borders show, so it reads as a triangular notch pointing back at
+            Maya.
+
+            The offset tracks her FACE, which sits roughly a third of the way down
+            the artwork — so it scales with the illustration rather than staying
+            pinned near the top edge and pointing at her hijab. */}
+        <span
+          className="absolute -left-[7px] top-8 h-3 w-3 rotate-45 border-b-[1.5px] border-l-[1.5px] border-border bg-card max-[360px]:top-6 sm:top-10 lg:top-12"
+          aria-hidden
+        />
+        {/* Question sits 2px above the answer cards (text-sm / 14px), not shouting
+            over them — Maya is asking, not announcing. */}
+        <h2 className="text-balance font-display text-base font-bold leading-snug tracking-tight">
+          {question}
+        </h2>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The three-band question layout, mirroring the reference app:
+ *
+ *   ── Maya + question   (top, fixed)
+ *   ── flexible gap      (absorbs all spare height)
+ *   ── answers + footer  (bottom, fixed)
+ *
+ * The middle band is what makes this fit any viewport: it grows on a tall desktop
+ * and collapses to nothing on a short phone, so the answers stay reachable at the
+ * bottom without the page ever scrolling. `min-h-0` on the gap is what lets it
+ * actually shrink — without it, flex children refuse to go below their content
+ * size and the layout overflows.
+ */
 function QuestionShell({
   question,
   hint,
+  answerHint,
   children,
   footer,
 }: {
   question: string
+  /** Sits under the bubble, next to Maya — reads as part of what she's saying. */
   hint?: string
+  /**
+   * Sits directly ABOVE the answers, at the bottom of the screen.
+   *
+   * Use this for anything that explains *why we're asking* or *what happens to
+   * the answer* ("this is your account", "won't be shared"). Stranded up by the
+   * bubble it reads as a stray aside; sitting on top of the input, it lands
+   * exactly when the parent is deciding what to type.
+   */
+  answerHint?: string
   children: React.ReactNode
   footer?: string
 }) {
   return (
-    <div className="mx-auto max-w-lg animate-fade-up" style={{ animationFillMode: "both" }}>
-      <h2 className="text-balance text-center font-display text-xl font-bold leading-snug tracking-tight sm:text-2xl">
-        {question}
-      </h2>
-      {hint && (
-        <p className="mx-auto mt-2.5 max-w-md text-center text-[13px] leading-snug text-muted-foreground">
-          {hint}
-        </p>
-      )}
-      <div className="mt-8">{children}</div>
-      {footer && (
-        <p className="mt-5 text-center text-xs font-medium text-muted-foreground">{footer}</p>
-      )}
+    <div
+      className="flex h-full animate-fade-up flex-col"
+      style={{ animationFillMode: "both" }}
+    >
+      {/* The QUESTION band takes all the spare height, and is the ONLY part that
+          can ever scroll — and only in the pathological case of a very long
+          question on a very short phone.
+
+          The ANSWERS band below is shrink-0, so it is physically incapable of
+          being pushed off-screen. That's the guarantee: whatever the viewport,
+          whatever the keyboard is doing, the parent can always reach the thing
+          they have to tap. */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <MayaAsk question={question} />
+        {/* Indent matches the illustration + gap, so the hint hangs under the
+            bubble rather than under Maya. */}
+        {hint && (
+          <p className="mt-2.5 pl-[106px] text-[13px] leading-snug text-muted-foreground sm:pl-[140px] lg:pl-[156px]">
+            {hint}
+          </p>
+        )}
+      </div>
+
+      <div className="shrink-0 pb-1 pt-4">
+        {answerHint && (
+          <p className="mb-3 text-balance text-[13px] leading-snug text-muted-foreground">
+            {answerHint}
+          </p>
+        )}
+        {children}
+        {footer && (
+          <p className="mt-4 text-balance text-center text-xs font-medium text-muted-foreground">
+            {footer}
+          </p>
+        )}
+      </div>
     </div>
   )
 }
@@ -678,17 +813,18 @@ const INPUT_CLASS =
   "w-full rounded-2xl border-[1.5px] border-border bg-muted px-4 py-3.5 text-base text-foreground outline-none transition placeholder:text-muted-foreground focus:border-primary focus:[box-shadow:var(--ring-focus)]"
 
 function TextQuestion({
-  question, hint, placeholder, value, onChange, onSubmit,
+  question, hint, answerHint, placeholder, value, onChange, onSubmit,
 }: {
   question: string
   hint?: string
+  answerHint?: string
   placeholder: string
   value: string
   onChange: (v: string) => void
   onSubmit: () => void
 }) {
   return (
-    <QuestionShell question={question} hint={hint}>
+    <QuestionShell question={question} hint={hint} answerHint={answerHint}>
       <input
         autoFocus
         type="text"
@@ -709,11 +845,12 @@ function TextQuestion({
 }
 
 function ChoiceQuestion({
-  question, hint, footer, cols, options, value,
+  question, hint, answerHint, footer, cols, options, value,
   otherValue, otherPlaceholder, onOtherChange, onPick, onOtherSubmit,
 }: {
   question: string
   hint?: string
+  answerHint?: string
   footer?: string
   cols: 1 | 2
   options: { value: string; label: string }[]
@@ -738,7 +875,7 @@ function ChoiceQuestion({
   // advance on the catch-all alone, or the value would be meaningless.
   if (otherActive) {
     return (
-      <QuestionShell question={question} hint={hint} footer={footer}>
+      <QuestionShell question={question} hint={hint} answerHint={answerHint} footer={footer}>
         <input
           ref={inputRef}
           autoFocus
@@ -760,7 +897,7 @@ function ChoiceQuestion({
   }
 
   return (
-    <QuestionShell question={question} hint={hint} footer={footer}>
+    <QuestionShell question={question} hint={hint} answerHint={answerHint} footer={footer}>
       <div className={cols === 2 ? "grid grid-cols-2 gap-2.5" : "grid gap-2.5"}>
         {options.map((o) => (
           <OptionCard
@@ -821,25 +958,24 @@ function OptionCard({
  * here would make the flag rule uncomputable, so the component cannot offer one.
  */
 function ScreeningQuestion({
-  intro, question, value, onPick,
+  question, value, footer = "Ini bukan diagnosis.", onPick,
 }: {
-  intro?: string
   question: string
   /** The already-given answer — so going back shows what they said. */
   value: ScreeningAnswer | null
+  /**
+   * The reassurance under the options. The FIRST screening question carries the
+   * long form ("…jawapan anda membantu saya sesuaikan program"), because that is
+   * the moment the parent needs to hear why they're being asked. The remaining
+   * five keep the short form — repeating the full sentence six times would turn
+   * reassurance into noise.
+   */
+  footer?: string
   onPick: (v: ScreeningAnswer) => void
 }) {
   return (
-    <div className="mx-auto max-w-lg animate-fade-up" style={{ animationFillMode: "both" }}>
-      {intro && (
-        <p className="mx-auto mb-6 max-w-md text-center text-[13px] leading-relaxed text-muted-foreground">
-          {intro}
-        </p>
-      )}
-      <h2 className="text-balance text-center font-display text-xl font-bold leading-snug tracking-tight sm:text-2xl">
-        {question}
-      </h2>
-      <div className="mt-8 grid gap-2.5">
+    <QuestionShell question={question} footer={footer}>
+      <div className="grid gap-2.5">
         {SCREENING_OPTS.map((o) => (
           <OptionCard
             key={o.value}
@@ -849,10 +985,7 @@ function ScreeningQuestion({
           />
         ))}
       </div>
-      <p className="mt-5 text-center text-xs font-medium text-muted-foreground">
-        Ini bukan diagnosis.
-      </p>
-    </div>
+    </QuestionShell>
   )
 }
 

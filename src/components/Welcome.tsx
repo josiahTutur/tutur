@@ -281,10 +281,13 @@ export function StoryPage({
         </span>
       </div>
 
+      {/* max-h caps the illustration on short screens so the copy and the CTA
+          below it can never be pushed out of reach. object-contain keeps the
+          43:24 crop intact while it scales down. */}
       <img
         src={INTRO_IMAGES[step]}
         alt=""
-        className="w-full select-none rounded-3xl shadow-[0_16px_40px_-16px_hsl(258_60%_40%/0.4)]"
+        className="max-h-[34svh] w-full select-none rounded-3xl object-contain shadow-[0_16px_40px_-16px_hsl(258_60%_40%/0.4)]"
         draggable={false}
       />
 
