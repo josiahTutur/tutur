@@ -24,7 +24,7 @@ import JoinChild from "@/components/JoinChild"
 import { clearChatProgress } from "@/components/Chat"
 import DashboardHub from "@/components/DashboardHub"
 import AccountDeleted from "@/components/AccountDeleted"
-import { PilotPreview } from "@/components/day/PilotPreview"
+import { PilotPreview } from "@/components/preverb/PilotPreview"
 import {
   OnboardingFlow,
   type OnboardingResult,
@@ -34,7 +34,6 @@ import {
   loadPilotOnboarding,
   loadSltBanner,
   savePilotOnboarding,
-  PILOT_DEFAULTS,
 } from "@/lib/pilotDb"
 import {
   clearDraft,
@@ -145,6 +144,10 @@ export default function App() {
     null
   )
 
+  // The Preverb child. Needed to write day sessions — the table the pilot's
+  // primary metric ("did they complete the daily loop?") is computed from.
+  const [childId, setChildId] = useState<string | null>(null)
+
   // Primary developmental goal (G1–G10) the parent picked after profiling.
   // Anchors the intervention pathway and is editable later from Tetapan.
   const [goal, setGoal] = useState<string>()
@@ -223,6 +226,7 @@ export default function App() {
         // must come from the authoritative source (vault + children), not from the
         // legacy `profiles` copy which a pre-pilot user may not have at all.
         if (pilot) {
+          setChildId(pilot.childId)
           setProfile((p) => ({
             childName: pilot.anak || p?.childName || "",
             childAge: p?.childAge ?? "",
@@ -230,16 +234,16 @@ export default function App() {
             relationship: p?.relationship ?? "",
             guardianAge: p?.guardianAge ?? "",
             panggilan: pilot.panggilan,
-            stage: p?.stage ?? PILOT_DEFAULTS.stage,
+            stage: p?.stage ?? 0, // Goal Base concept; Preverb families have none
             email: p?.email ?? "",
             profiledAt: p?.profiledAt ?? "",
           }))
         }
-        setGoal(ob?.goal ?? PILOT_DEFAULTS.goal)
-        setRoutines(ob?.routines?.length ? ob.routines : [...PILOT_DEFAULTS.routines])
-        setActivities(
-          ob?.activities?.length ? ob.activities : [...PILOT_DEFAULTS.activities]
-        )
+        // Goal Base values, if this family has any. A Preverb family does not —
+        // these stay undefined/empty rather than being invented.
+        setGoal(ob?.goal)
+        setRoutines(ob?.routines ?? [])
+        setActivities(ob?.activities ?? [])
         // Only ever surfaced for a flagged screening, so this is cheap for
         // everyone else — it returns { show: false } and nothing renders.
         const banner = await loadSltBanner()
@@ -386,6 +390,7 @@ export default function App() {
           // in every activity script.
           await clearDraft()
           setDraft(null)
+          setChildId(res.childId)
           setSltBanner({ show: r.variant === "B", childId: res.childId })
 
           setProfile({
@@ -395,13 +400,12 @@ export default function App() {
             relationship: r.relationship,
             guardianAge: r.parentAge,
             panggilan: r.panggilan, // spoken in every activity script
-            stage: PILOT_DEFAULTS.stage, // ⚠ fake — nothing measures this
+            // `stage` is a Goal Base concept. Preverb has none — the screening
+            // cannot produce one. 0 = "no stage", not "stage zero".
+            stage: 0,
             email: userEmail,
             profiledAt: new Date().toISOString().slice(0, 10),
           })
-          setGoal(PILOT_DEFAULTS.goal)
-          setRoutines([...PILOT_DEFAULTS.routines])
-          setActivities([...PILOT_DEFAULTS.activities])
           setSavingOnboarding(false)
           setView("hub")
         }}
@@ -413,6 +417,7 @@ export default function App() {
     return (
       <DashboardHub
         profile={profile}
+        childId={childId}
         sltBanner={sltBanner?.show ?? false}
         onDismissSlt={() => {
           setSltBanner((b) => (b ? { ...b, show: false } : b))

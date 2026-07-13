@@ -281,13 +281,19 @@ export function StoryPage({
         </span>
       </div>
 
-      {/* max-h caps the illustration on short screens so the copy and the CTA
-          below it can never be pushed out of reach. object-contain keeps the
-          43:24 crop intact while it scales down. */}
+      {/* The width is capped at (34svh × 1.7917) — the height budget multiplied by
+          the image's 43:24 aspect. That makes the <img> box exactly the size of the
+          image at every screen width, so the rounded corners and shadow hug the
+          artwork instead of stretching past it.
+
+          The old approach (w-full + max-h + object-contain) let the BOX keep growing
+          while the IMAGE stopped, which is what put white letterbox bars inside the
+          shadow on wide screens. Capping height still works — it's just enforced
+          through the width now. */}
       <img
         src={INTRO_IMAGES[step]}
         alt=""
-        className="max-h-[34svh] w-full select-none rounded-3xl object-contain shadow-[0_16px_40px_-16px_hsl(258_60%_40%/0.4)]"
+        className="mx-auto block h-auto w-full max-w-[calc(34svh*1.7917)] select-none rounded-3xl shadow-[0_16px_40px_-16px_hsl(258_60%_40%/0.4)]"
         draggable={false}
       />
 

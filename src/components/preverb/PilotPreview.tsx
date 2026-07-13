@@ -16,15 +16,15 @@
 
 import { useState } from "react"
 
-import { DayPlayer } from "@/components/day/DayPlayer"
-import { PilotDashboard } from "@/components/day/PilotDashboard"
+import { DayPlayer } from "@/components/preverb/DayPlayer"
+import { PilotDashboard } from "@/components/preverb/PilotDashboard"
 import {
   OnboardingFlow,
   type OnboardingResult,
 } from "@/components/onboarding/OnboardingFlow"
 import { Button } from "@/components/ui/button"
-import { DAYS, isActivity } from "@/content/days"
-import { type Interest } from "@/lib/dayConfig"
+import { DAYS, isActivity } from "@/content/preverb"
+import { type Interest } from "@/lib/preverbConfig"
 import { type Vars } from "@/lib/interpolate"
 import { type ResultVariant } from "@/lib/screening"
 

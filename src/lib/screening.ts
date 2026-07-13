@@ -42,14 +42,14 @@ export type ParentAgeBucket = "bawah_25" | "25_34" | "35_44" | "45_54" | "lain"
 /**
  * The language the CHILD HEARS most at home — not the parent's preference.
  *
- * `campur` (code-switched Malay + English) is expected to be the most common
- * answer in Malaysia. Omitting it would have forced families to pick one at
- * random and quietly corrupted the data.
- *
  * `lain` is not a failure state: it is the roadmap. It tells us which language
  * to build next, and how many families are waiting for it.
+ *
+ * NOTE: `campur` (code-switched Malay + English) was removed from the options by
+ * product decision. The DB CHECK in 0014 still permits the value, so it can be
+ * reinstated without a migration if the pilot shows families struggling to pick.
  */
-export type HomeLanguage = "melayu" | "english" | "campur" | "lain"
+export type HomeLanguage = "melayu" | "english" | "lain"
 
 /** A5 — sets `{panggilan}` used inside every activity script. */
 export type Relationship = "ibu" | "ayah" | "nenek" | "datuk" | "lain"

@@ -62,6 +62,18 @@ export default {
           "0%": { opacity: "0", transform: "translateY(24px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
+        // The tracker's question transition. Direction-aware: forward slides in
+        // from the right, Back from the left — so a parent can SEE which way she
+        // moved. Ten near-identical screens changed instantly before this, and a
+        // question you did not notice changing is a question you answer twice.
+        "q-in-next": {
+          "0%": { opacity: "0", transform: "translateX(18px)" },
+          "100%": { opacity: "1", transform: "translateX(0)" },
+        },
+        "q-in-prev": {
+          "0%": { opacity: "0", transform: "translateX(-18px)" },
+          "100%": { opacity: "1", transform: "translateX(0)" },
+        },
         "fade-in": {
           "0%": { opacity: "0" },
           "100%": { opacity: "1" },
@@ -86,6 +98,8 @@ export default {
       animation: {
         "fade-up": "fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards",
         "fade-in": "fade-in 0.6s ease forwards",
+        "q-in-next": "q-in-next 500ms cubic-bezier(0.22, 1, 0.36, 1) both",
+        "q-in-prev": "q-in-prev 500ms cubic-bezier(0.22, 1, 0.36, 1) both",
         "scale-in": "scale-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards",
         shimmer: "shimmer 2.5s linear infinite",
         "pulse-glow": "pulse-glow 2.8s ease-in-out infinite",

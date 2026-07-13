@@ -1,7 +1,8 @@
 import type { Profile } from "@/lib/types"
 import { STAGE_INFO, STAGE_ORDER } from "@/lib/activities"
 import { GOALS } from "@/lib/goals"
-import { currentStreak, lastNDaysCompletion } from "@/lib/progress"
+import { currentStreak, lastNDaysSeconds } from "@/lib/progress"
+import { type PreverbProgress } from "@/lib/preverbDb"
 import ProgressCalendar from "@/components/ProgressCalendar"
 import { useLang, pick } from "@/lib/i18n"
 import {
@@ -26,7 +27,7 @@ const STR = {
     activeGoalLabel: "Matlamat aktif: ",
     statStreakLabel: "Streak harian",
     statMinutesLabel: "Minit minggu ini",
-    statActivitiesLabel: "Aktiviti selesai (30h)",
+    statActivitiesLabel: "Minit bersama anak (30h)",
     statNewWordsLabel: "Perkataan baharu",
     sectionConsistency: "Konsistensi Anda",
     sectionChildProgress: "Perkembangan Anak",
@@ -60,7 +61,7 @@ const STR = {
     activeGoalLabel: "Active goal: ",
     statStreakLabel: "Daily streak",
     statMinutesLabel: "Minutes this week",
-    statActivitiesLabel: "Activities done (30d)",
+    statActivitiesLabel: "Minutes with your child (30d)",
     statNewWordsLabel: "New words",
     sectionConsistency: "Your Consistency",
     sectionChildProgress: "Your Child's Progress",
@@ -114,9 +115,6 @@ const DAILY_TARGET_MIN = 15 // 3 activities × 5 min
 // Intervention minutes logged each day this week.
 const WEEK_MINUTES = [15, 20, 15, 10, 20, 15, 15]
 
-// Activities completed each of the last 30 days (0–3 per day) — shared with
-// the Aktiviti Harian calendar so the two views never disagree.
-const LAST_30_DAYS = lastNDaysCompletion(30)
 
 // Cumulative new words / spontaneous communication wins, by week (8 weeks).
 const WORDS_BY_WEEK = [2, 5, 9, 12, 16, 19, 22, 26]
@@ -125,7 +123,6 @@ const WORDS_BY_WEEK = [2, 5, 9, 12, 16, 19, 22, 26]
 // in the STR table (skillFocusNames), indexed positionally.
 const SKILL_FOCUS = [{ pct: 38 }, { pct: 27 }, { pct: 20 }, { pct: 15 }]
 
-const CURRENT_STREAK = currentStreak() // consecutive days with ≥1 activity
 const WITHIN_STAGE_PCT = 60 // progress through the current stage
 
 /* -------------------------------------------------------------------------- */
@@ -135,16 +132,13 @@ const WITHIN_STAGE_PCT = 60 // progress through the current stage
 export default function AnalysisView({
   profile,
   goal,
-  todayCompleted,
-  todaySeconds,
+  progress,
 }: {
   profile?: Profile
   /** Active primary goal code (G1–G10). */
   goal?: string
-  /** Live count of activities completed today (shared with Aktiviti Harian). */
-  todayCompleted?: number
-  /** Live total seconds spent on today's activities. */
-  todaySeconds?: number
+  /** The family's real Preverb history — shared with Aktiviti Harian. */
+  progress: PreverbProgress
 }) {
   const { lang } = useLang()
   const s = STR[lang]
@@ -152,8 +146,15 @@ export default function AnalysisView({
   const stage = Math.min(Math.max(profile?.stage ?? 1, 1), 5)
   const activeGoal = GOALS.find((g) => g.code === goal)
 
+  // Real, from preverb_activity_run — the two numbers on this screen that are
+  // not placeholders. Everything else here (WEEK_MINUTES, WORDS_BY_WEEK,
+  // SKILL_FOCUS) is still invented, which is why the whole view sits behind the
+  // "coming soon" blur.
+  const last30 = lastNDaysSeconds(progress, 30)
+  const streak = currentStreak(progress)
+  const minutesDone = Math.round(last30.reduce((a, b) => a + b, 0) / 60)
+
   const weekTotal = WEEK_MINUTES.reduce((a, b) => a + b, 0)
-  const activitiesDone = LAST_30_DAYS.reduce((a, b) => a + b, 0)
   const newWords = WORDS_BY_WEEK[WORDS_BY_WEEK.length - 1]
 
   return (
@@ -194,7 +195,7 @@ export default function AnalysisView({
           <StatCard
             icon={Flame}
             hue={CORAL}
-            value={`${CURRENT_STREAK} ${lang === "ms" ? "hari" : "days"}`}
+            value={`${streak} ${lang === "ms" ? "hari" : "days"}`}
             label={s.statStreakLabel}
           />
           <StatCard
@@ -206,7 +207,7 @@ export default function AnalysisView({
           <StatCard
             icon={CheckCircle2}
             hue={TEAL}
-            value={`${activitiesDone}`}
+            value={`${minutesDone}`}
             label={s.statActivitiesLabel}
           />
           <StatCard
@@ -220,13 +221,8 @@ export default function AnalysisView({
         {/* ----------------------- Track 1 — Konsistensi ----------------------- */}
         <SectionLabel>{s.sectionConsistency}</SectionLabel>
 
-        {/* Daily-completion calendar — only real completions show; past days
-            stay neutral (no placeholder) until truly done. */}
-        <ProgressCalendar
-          todayCompleted={todayCompleted}
-          todaySeconds={todaySeconds}
-          samplePast={false}
-        />
+        {/* The real month, from preverb_activity_run. */}
+        <ProgressCalendar progress={progress} />
 
         {/* Weekly intervention minutes vs target */}
         <Card

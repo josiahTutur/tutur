@@ -114,6 +114,7 @@ const STR = {
     // Chrome
     back: "Kembali",
     next: "Seterusnya",
+    backToChoices: "Lihat pilihan lain",
     continue: "Teruskan",
     lastQuestion: "Soalan terakhir",
     saving: "Menyimpan…",
@@ -165,13 +166,13 @@ const STR = {
 
     // LANG · home language
     q_language: (n: string) => `Bahasa apa yang paling kerap didengar ${n} di rumah?`,
+    hint_language: (n: string) =>
+      `Fikirkan siapa yang paling lama bersama ${n} setiap hari — nenek, datuk, pengasuh, atau anda.`,
     language: {
       melayu: "Bahasa Melayu",
       english: "English",
-      campur: "Campuran Melayu & English",
       lain: "Lain-lain",
     },
-    ph_languageOther: "cth: Mandarin, Tamil",
 
     // A7–A11 · screening
     q_s1: (n: string) => `Adakah ${n} kerap membuat pandangan mata dengan anda?`,
@@ -224,6 +225,7 @@ const STR = {
 
     back: "Back",
     next: "Next",
+    backToChoices: "See the other choices",
     continue: "Continue",
     lastQuestion: "Last question",
     saving: "Saving…",
@@ -269,13 +271,13 @@ const STR = {
     ph_parentAgeOther: "e.g. 58",
 
     q_language: (n: string) => `Which language does ${n} hear most at home?`,
+    hint_language: (n: string) =>
+      `Think about who spends the most time with ${n} each day — a grandparent, a carer, or you.`,
     language: {
       melayu: "Malay",
       english: "English",
-      campur: "Mixed Malay & English",
       lain: "Other",
     },
-    ph_languageOther: "e.g. Mandarin, Tamil",
 
     q_s1: (n: string) => `Does ${n} often make eye contact with you?`,
     q_s2: (n: string) => `Does ${n} show interest in interacting with you or other people?`,
@@ -463,19 +465,49 @@ export function OnboardingFlow({
     if (next) setStep(next)
   }
 
-  // The two parts are an INTERNAL structure — the parent must never see them.
-  // Each part counts from 1, so the first run reads "Soalan 1/5" and never hints
-  // that six more are queued behind it. Part 2 shrinks to 5 when the child is
-  // under 12 months and A11 is skipped, so the total is computed, never hardcoded.
+  /**
+   * ── PROGRESS ─────────────────────────────────────────────────────────────
+   *
+   * ONE bar, ONE running count ("Soalan 7 / 12").
+   *
+   * The bar tracks the whole run INCLUDING the SLT credibility screen — it is a
+   * step on the journey even though it asks nothing, and letting the bar advance
+   * across it means the parent is never stalled at the same position for a screen.
+   *
+   * The COUNT, though, only counts questions. So the SLT screen moves the bar and
+   * shows no number: honest on both axes — you have made progress, and you have
+   * not been asked anything.
+   *
+   * Part 2 shrinks to 5 when the child is under 12 months and A11 is skipped, so
+   * both the bar and the total are computed, never hardcoded.
+   */
   const part2 = PART2.filter((s) => !(skipA11 && s === "A11"))
-  const progress: { label: string; n: number; total: number } | null =
-    PART1.includes(step)
-      ? { label: w.questionOf, n: PART1.indexOf(step) + 1, total: PART1.length }
-      : part2.includes(step)
-        ? { label: w.questionOf, n: part2.indexOf(step) + 1, total: part2.length }
-        : step === "A14"
-          ? { label: s.lastQuestion, n: 1, total: 1 }
-          : null
+
+  /** Every screen the bar advances across, in order. */
+  const TRACKED: Step[] = [...PART1, "slt", ...part2]
+  const totalQuestions = PART1.length + part2.length
+
+  const trackedIdx = TRACKED.indexOf(step)
+  const pastTracked = step === "A13" || step === "A14"
+  const fill =
+    trackedIdx >= 0 ? ((trackedIdx + 1) / TRACKED.length) * 100 : pastTracked ? 100 : 0
+
+  /** The running question number, 1…12. Null on the SLT screen — it asks nothing. */
+  const inPart1 = PART1.includes(step)
+  const inPart2 = part2.includes(step)
+  const questionNo = inPart1
+    ? PART1.indexOf(step) + 1
+    : inPart2
+      ? PART1.length + part2.indexOf(step) + 1
+      : null
+
+  const showProgress = trackedIdx >= 0 || step === "A14"
+  const counter =
+    questionNo !== null
+      ? `${w.questionOf} ${questionNo} / ${totalQuestions}`
+      : step === "A14"
+        ? s.lastQuestion
+        : null // the SLT screen: the bar moves, but there is no question to number
 
   /**
    * Persist the draft once per SCREEN — keyed on `step`, not on every field.
@@ -556,11 +588,11 @@ export function OnboardingFlow({
   const storyStep = isStory ? Number(step.slice(5)) : 0
 
   /**
-   * Question screens use a fixed-height, three-band layout (Maya + question at
-   * the top, answers pinned to the bottom) rather than a centred block. `progress`
-   * is non-null on exactly those screens, so it doubles as the switch.
+   * Question screens use a fixed-height, three-band layout (Maya + question at the
+   * top, answers pinned to the bottom) rather than a centred block. The SLT page is
+   * image-first, so it is NOT one of these even though it shows the progress bars.
    */
-  const isQuestion = progress !== null
+  const isQuestion = inPart1 || inPart2 || step === "A14"
 
   /** Screens that actually render a footer CTA. The rest auto-advance on tap. */
   const hasFooterCta =
@@ -600,22 +632,32 @@ export function OnboardingFlow({
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
-        {progress && (
+        {showProgress && (
           <>
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
               <div
                 className="h-full rounded-full transition-all duration-500"
                 style={{
-                  width: `${(progress.n / progress.total) * 100}%`,
+                  width: `${fill}%`,
                   background:
                     "linear-gradient(to right, hsl(258 65% 55%), hsl(258 70% 45%))",
                 }}
               />
             </div>
-            <span className="shrink-0 text-xs font-semibold text-muted-foreground">
-              {progress.total > 1
-                ? `${progress.label} ${progress.n} / ${progress.total}`
-                : progress.label}
+
+            {/* The counter slot is ALWAYS rendered, at a fixed width, even on the
+                SLT screen where it has no text.
+
+                It used to be conditional — and because the bar is flex-1, dropping
+                the counter let the TRACK grow ~85px wider. The fill then went from
+                54% of a wide track (292px) to 62% of a narrow one (280px): the
+                percentage rose, the pixels shrank, and the bar visibly slid
+                BACKWARDS on the way into question 7.
+
+                Reserving the space keeps the track a constant width, so the fill
+                only ever moves one way. */}
+            <span className="w-28 shrink-0 text-right text-xs font-semibold tabular-nums text-muted-foreground">
+              {counter}
             </span>
           </>
         )}
@@ -662,6 +704,7 @@ export function OnboardingFlow({
           {step === "A3" && (
             <ChoiceQuestion
               nextLabel={w.next}
+              backToChoices={s.backToChoices}
               question={s.q_childAge(name)}
               cols={2}
               value={childAge}
@@ -700,6 +743,7 @@ export function OnboardingFlow({
           {step === "A5" && (
             <ChoiceQuestion
               nextLabel={w.next}
+              backToChoices={s.backToChoices}
               question={s.q_relationship(name)}
               cols={2}
               value={relationship}
@@ -726,6 +770,7 @@ export function OnboardingFlow({
           {step === "A6" && (
             <ChoiceQuestion
               nextLabel={w.next}
+              backToChoices={s.backToChoices}
               question={s.q_parentAge}
               cols={2}
               value={parentAge}
@@ -752,17 +797,17 @@ export function OnboardingFlow({
           {step === "LANG" && (
             <ChoiceQuestion
               nextLabel={w.next}
+              backToChoices={s.backToChoices}
               question={s.q_language(name)}
+              answerHint={s.hint_language(name)}
               cols={1}
               value={homeLanguage}
               options={[
                 { value: "melayu", label: s.language.melayu },
                 { value: "english", label: s.language.english },
-                { value: "campur", label: s.language.campur },
                 { value: "lain", label: s.language.lain },
               ]}
               otherValue={homeLanguageOther}
-              otherPlaceholder={s.ph_languageOther}
               otherMaxLength={MAX_LEN.language}
               onOtherChange={setHomeLanguageOther}
               onPick={(v) => {
@@ -824,6 +869,7 @@ export function OnboardingFlow({
           {step === "A12" && (
             <ChoiceQuestion
               nextLabel={w.next}
+              backToChoices={s.backToChoices}
               question={s.q_diagnosis(name)}
               cols={1}
               footer={s.notDiagnosis}
@@ -978,7 +1024,7 @@ function SltCredibility({ s }: { s: Copy }) {
       <img
         src="/welcome/credibilities.png"
         alt=""
-        className="max-h-[34svh] w-full select-none rounded-3xl object-contain shadow-[0_16px_40px_-16px_hsl(258_60%_40%/0.4)]"
+        className="mx-auto block h-auto w-full max-w-[calc(34svh*1.7917)] select-none rounded-3xl shadow-[0_16px_40px_-16px_hsl(258_60%_40%/0.4)]"
         draggable={false}
       />
 
@@ -1185,7 +1231,7 @@ function TextQuestion({
 function ChoiceQuestion({
   question, hint, answerHint, otherHint, footer, cols, options, value,
   otherValue, otherPlaceholder, otherMaxLength, otherNumeric = false,
-  nextLabel, onOtherChange, onPick, onOtherSubmit,
+  nextLabel, backToChoices, onOtherChange, onPick, onOtherSubmit,
 }: {
   question: string
   nextLabel: string
@@ -1213,10 +1259,13 @@ function ChoiceQuestion({
    */
   value?: string | null
   otherValue: string
-  otherPlaceholder: string
+  /** Omit for a blank box — see the LANG step. */
+  otherPlaceholder?: string
   onOtherChange: (v: string) => void
   onPick: (v: string) => void
   onOtherSubmit: () => void
+  /** "See the choices again" — the way out of the Lain-lain text field. */
+  backToChoices: string
 }) {
   // If they'd chosen "Lain-lain", drop them straight back into their own text
   // rather than the card grid — that IS their answer.
@@ -1228,6 +1277,21 @@ function ChoiceQuestion({
   if (otherActive) {
     return (
       <QuestionShell question={question} hint={hint} answerHint={otherHint ?? answerHint} footer={footer}>
+        {/* THE WAY BACK.
+            Without this, "Lain-lain" was a one-way door. Worse, `otherActive` is
+            seeded from the STORED value — so a parent resuming a draft, or simply
+            pressing Back into a question she had answered "Lain-lain", landed
+            straight in the text field and never saw the option cards at all. An
+            empty box and a button, and no sign that this question had ever had
+            choices. That is the bug she reported: "I don't see any choices." */}
+        <button
+          type="button"
+          onClick={() => setOtherActive(false)}
+          className="mb-3 flex items-center gap-1.5 text-[13px] font-semibold text-primary transition-opacity hover:opacity-70"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          {backToChoices}
+        </button>
         {/* Also no autoFocus — it would fire on MOUNT, which means resuming into a
             question whose answer was "Lain-lain" would pop the keyboard before the
             parent had read anything. Focus is instead triggered by the tap handler
@@ -1403,7 +1467,7 @@ function ResultPage({ s, name, variant }: { s: Copy; name: string; variant: Resu
         <img
           src={copy.illustration}
           alt=""
-          className="max-h-[34svh] w-full select-none rounded-3xl object-contain shadow-[0_16px_40px_-16px_hsl(258_60%_40%/0.4)]"
+          className="mx-auto block h-auto w-full max-w-[calc(34svh*1.7917)] select-none rounded-3xl shadow-[0_16px_40px_-16px_hsl(258_60%_40%/0.4)]"
           draggable={false}
         />
       ) : (

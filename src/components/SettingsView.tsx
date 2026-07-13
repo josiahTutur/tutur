@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { GOAL_BASE_ENABLED } from "@/lib/config"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
 import {
@@ -586,6 +587,7 @@ export default function SettingsView({
         {!isAdmin && (
           <>
         {/* Communication stage — read-only summary, changed via a confirmed dialog */}
+        {GOAL_BASE_ENABLED && (
         <Section icon={Sparkles} title={s.stageTitle}>
           <p className="text-xs leading-relaxed text-muted-foreground">
             {s.stageDesc}
@@ -632,8 +634,10 @@ export default function SettingsView({
             </button>
           </div>
         </Section>
+        )}
 
         {/* Developmental goals — shared with the onboarding picker */}
+        {GOAL_BASE_ENABLED && (
         <Section icon={Target} title={s.goalsTitle}>
           <div className="flex items-start justify-between gap-3">
             <p className="text-xs leading-relaxed text-muted-foreground">
@@ -709,8 +713,10 @@ export default function SettingsView({
             })}
           </ul>
         </Section>
+        )}
 
         {/* Daily routines — summary, changed via a confirmed dialog */}
+        {GOAL_BASE_ENABLED && (
         <Section icon={Clock} title={s.routinesTitle}>
           <p className="text-xs leading-relaxed text-muted-foreground">
             {s.routinesDesc}
@@ -757,6 +763,7 @@ export default function SettingsView({
             </div>
           </div>
         </Section>
+        )}
 
         {/* Notifications */}
         <Section icon={Bell} title={s.notificationsTitle}>

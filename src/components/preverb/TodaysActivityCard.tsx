@@ -15,8 +15,8 @@ import { ArrowRight, Clock, Lock } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { TOTAL_DAYS } from "@/content/days"
-import { type AnyDayConfig } from "@/lib/dayConfig"
+import { TOTAL_DAYS } from "@/content/preverb"
+import { type AnyDayConfig } from "@/lib/preverbConfig"
 import { interpolate, type Vars } from "@/lib/interpolate"
 import { useLang } from "@/lib/i18n"
 

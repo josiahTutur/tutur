@@ -19,16 +19,18 @@
  * ========================================================================== */
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { ArrowLeft, ArrowRight, HelpCircle, Layers, Star, X } from "lucide-react"
+import { ArrowLeft, ArrowRight, Check, HelpCircle, Layers } from "lucide-react"
 
+import { SpeakButton } from "@/components/preverb/SpeakButton"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import {
+  INTERESTS,
   type ActivityPhase,
   type DayConfig,
   type Interest,
   type ScriptLine,
-} from "@/lib/dayConfig"
+} from "@/lib/preverbConfig"
 import { useLang } from "@/lib/i18n"
 import { interpolate, type Vars } from "@/lib/interpolate"
 import { cn } from "@/lib/utils"
@@ -36,11 +38,20 @@ import { cn } from "@/lib/utils"
 const STR = {
   ms: {
     phases: { persediaan: "Persediaan", semasa: "Semasa", selesai: "Selesai" },
-    markMoment: "Tandai momen",
+    tone: "Nada",
     ifChildDoes: (n: string) => `Jika ${n} buat lain?`,
     ccsCta: (n: string) => `Tahap CCS — cara cakap ikut tahap ${n}`,
     next: "Seterusnya",
     finish: "Selesai — jawab soalan ringkas",
+    recordTitle: "Rekod Minat",
+    recordAsk: (n: string) => `Mainan mana ${n} pilih?`,
+    recordWhy: "Pilihan ini jadi konteks untuk Hari 2 hingga Hari 14. Rekod apa yang dia PILIH, bukan apa yang anda harap.",
+    toys: {
+      barbie: "Anak patung / Barbie",
+      masak_masak: "Masak-masak",
+      lego: "Lego / Blok",
+      lain: "Lain-lain",
+    },
     waitSignal: "Tunggu isyarat…",
     giveNow: "Bila dia beri isyarat — bagi SEGERA, dalam 2 saat.",
     hold: "Tahan… jangan bagi dulu",
@@ -61,11 +72,20 @@ const STR = {
   },
   en: {
     phases: { persediaan: "Setting up", semasa: "During play", selesai: "Wrapping up" },
-    markMoment: "Mark a moment",
+    tone: "Tone",
     ifChildDoes: (n: string) => `What if ${n} does something else?`,
     ccsCta: (n: string) => `CCS level — how to speak at ${n}'s level`,
     next: "Next",
     finish: "Done — a few quick questions",
+    recordTitle: "Record their interest",
+    recordAsk: (n: string) => `Which toy did ${n} choose?`,
+    recordWhy: "This choice becomes the context for Day 2 through Day 14. Record what they CHOSE, not what you hoped for.",
+    toys: {
+      barbie: "Doll / Barbie",
+      masak_masak: "Play kitchen",
+      lego: "Lego / Blocks",
+      lain: "Something else",
+    },
     waitSignal: "Wait for their signal…",
     giveNow: "The moment they signal — give it IMMEDIATELY, within 2 seconds.",
     hold: "Hold… don't give it yet",
@@ -138,6 +158,7 @@ export function ActivityPlayer({
   onDone,
   onQuit,
   onEvent,
+  onInterestRecorded,
 }: {
   day: DayConfig
   vars: Vars
@@ -147,17 +168,42 @@ export function ActivityPlayer({
   onQuit: () => void
   /** Where §6.1 event logging will hang. No-op in the skeleton. */
   onEvent?: (e: ActivityEvent) => void
+  /** Day 1 only — the toy the child chose. Contextualises D2–D14. */
+  onInterestRecorded?: (i: Interest) => void
 }) {
   const { lang } = useLang()
   const t = STR[lang]
-  const steps = useMemo(() => buildSteps(day, interest), [day, interest])
+
+  // Day 1 records the child's interest MID-ACTIVITY, not before it. The whole
+  // point of the persediaan phase is to lay out three toys and NOT suggest —
+  // the choice is the observation. So the picker sits at the seam between
+  // persediaan and semasa, which is exactly where the child has just chosen.
+  const [picked, setPicked] = useState<Interest | undefined>(undefined)
+  const chosen = interest ?? picked
+
+  /*
+   * Whether we have moved PAST the record-interest screen — which is a different
+   * question from whether a toy has been chosen.
+   *
+   * It used to be the same question: the picker rendered only while `chosen` was
+   * empty, so the moment she tapped Barbie the screen ceased to exist. Pressing
+   * Back then walked straight past it into the script, and a parent who had
+   * fat-fingered the wrong toy had no way to reach the choice again — a choice
+   * that silently contextualises the next thirteen days.
+   *
+   * Seeded from `interest`, so a family replaying Day 1 with a toy already on
+   * record is not re-interrogated — but Back still takes them to it.
+   */
+  const [interestDone, setInterestDone] = useState<boolean>(interest !== undefined)
+
+  const steps = useMemo(() => buildSteps(day, chosen), [day, chosen])
   const [i, setI] = useState(0)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [ccsOpen, setCcsOpen] = useState(false)
-  const [moments, setMoments] = useState(0)
 
   const step = steps[i]
   const isLast = i === steps.length - 1
+  const pct = steps.length ? Math.round(((i + 1) / steps.length) * 100) : 0
   const say = (s: string) => interpolate(s, vars)
 
   function emit(name: string, props?: Record<string, unknown>) {
@@ -166,7 +212,7 @@ export function ActivityPlayer({
 
   function advance() {
     if (isLast) {
-      emit("activity_completed", { day: day.day_number, moments })
+      emit("activity_completed", { day: day.day_number })
       onDone()
       return
     }
@@ -185,33 +231,71 @@ export function ActivityPlayer({
 
   if (!step) return null
 
+  /*
+   * The seam: the ONE index where persediaan ends and semasa begins. The three
+   * toys are down, the parent has waited, and the semasa script cannot be chosen
+   * until we know which toy the child took. That is the structure of Day 1.
+   *
+   * It is an INDEX, not a phase test. It used to be `step.phase !== "persediaan"`,
+   * which is true of every semasa AND selesai line — so Back from "Uh oh, jatuh!"
+   * (a selesai line, eight screens later) threw the parent all the way out to the
+   * toy picker. The seam is one place, not everywhere after a place.
+   */
+  const seamIdx = steps.findIndex((st) => st.phase !== "persediaan")
+  const atSeam = day.records_interest === true && seamIdx !== -1 && i === seamIdx
+
+  if (atSeam && !interestDone) {
+    return (
+      <InterestPicker
+        t={t}
+        say={say}
+        childName={vars.anak ?? ""}
+        selected={chosen}
+        onSelect={(pick) => {
+          setPicked(pick)
+          onInterestRecorded?.(pick)
+          emit("interest_recorded", { day: day.day_number, interest: pick })
+        }}
+        onNext={() => setInterestDone(true)}
+        onBack={() => setI((n) => Math.max(0, n - 1))}
+      />
+    )
+  }
+
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col">
-      {/* Top bar — phase chip + quit */}
-      <header className="flex items-center justify-between gap-3 px-5 py-4">
-        <span className="rounded-full bg-primary/10 px-3 py-1 font-display text-xs font-semibold text-primary">
-          {t.phases[step.phase]} · {step.phaseIndex}/{step.phaseCount}
+    <div className="mx-auto flex h-full w-full max-w-md flex-col overflow-hidden">
+      {/*
+        Back · progress · percent — the same header as the briefing screens, so
+        the whole activity reads as one continuous journey.
+
+        The phase chip ("Persediaan · 1/3") is deliberately GONE. Persediaan /
+        Semasa / Selesai are the SLT's structure, not the parent's task: she does
+        not do anything differently because a line is "wrapping up", and the chip
+        read like an instruction she had to follow. Worse, it counted PHASES, so
+        it sat at 1/3 for three lines and then leapt — telling her less about
+        where she was than the bar underneath it already did.
+
+        One number now, and it is the true one: how far through the script she is.
+      */}
+      {/* The header is now the progress bar and nothing else. Back moved down
+          beside the CTA — a whole header row spent on one icon was pushing the
+          script down and the button toward the fold. */}
+      <header className="flex shrink-0 items-center gap-3 px-5 pb-1 pt-4">
+        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full rounded-full bg-primary transition-[width] duration-500 ease-out"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <span className="w-10 shrink-0 text-right text-xs font-bold tabular-nums text-muted-foreground">
+          {pct}%
         </span>
-        <button
-          type="button"
-          onClick={onQuit}
-          className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          aria-label="Close activity"
-        >
-          <X className="size-5" />
-        </button>
       </header>
 
-      {/* Progress across the whole activity */}
-      <div className="mx-5 h-1 overflow-hidden rounded-full bg-muted">
-        <div
-          className="h-full rounded-full bg-primary transition-all duration-300"
-          style={{ width: `${((i + 1) / steps.length) * 100}%` }}
-        />
-      </div>
-
-      {/* The line card */}
-      <main className="flex flex-1 items-center justify-center px-5 py-8">
+      {/* The only band that flexes. It is top-aligned: the line sits right under
+          the progress bar, and the slack falls BELOW it, shrinking to nothing on
+          a short phone rather than pushing the CTA off the bottom. */}
+      <main className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto px-5 pt-4">
         <LineCard
           key={i}
           line={step.line}
@@ -231,23 +315,17 @@ export function ActivityPlayer({
       </main>
 
       {/* Persistent actions */}
-      <div className="flex items-center gap-2 px-5 pb-2">
+      {/* "Tandai momen" used to sit here. It was removed: it opened no input, so
+          there was nothing to write the moment INTO — it incremented a counter
+          and threw it away. A button that looks like it is catching something
+          precious and silently drops it is worse than no button. It belongs with
+          the reflection screen ("satu momen bermakna hari ini"), which does not
+          exist yet, and it should come back only once it can actually save. */}
+      <div className="flex shrink-0 items-center gap-2 px-5 pb-2">
         <Button
           variant="outline"
           size="sm"
-          className="flex-1"
-          onClick={() => {
-            setMoments((m) => m + 1)
-            emit("tandai_momen", { phase: step.phase, day: day.day_number })
-          }}
-        >
-          <Star className={cn("size-4", moments > 0 && "fill-current text-neon-cyan")} />
-          {t.markMoment}{moments > 0 ? ` (${moments})` : ""}
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="flex-1"
+          className="w-full"
           onClick={() => {
             setDrawerOpen(true)
             emit("drawer_opened", { day: day.day_number })
@@ -261,7 +339,7 @@ export function ActivityPlayer({
       {/* CCS ladder — the graded prompts. Always reachable during the activity,
           because the parent needs to pitch their language at the child's level
           mid-play, not decide it beforehand. */}
-      <div className="px-5 pb-3">
+      <div className="shrink-0 px-5 pb-3">
         <Button
           variant="outline"
           size="sm"
@@ -276,14 +354,21 @@ export function ActivityPlayer({
         </Button>
       </div>
 
-      {/* Advance */}
-      <footer className="flex items-center gap-2 border-t border-border px-5 py-4">
+      {/* Advance — with Back beside it. On the first line, Back leaves the
+          activity; after that it steps to the previous line. */}
+      <footer className="flex shrink-0 items-center gap-2 border-t border-border px-5 py-4">
         <Button
-          variant="ghost"
+          variant="outline"
           size="icon"
-          disabled={i === 0}
-          onClick={() => setI((n) => Math.max(0, n - 1))}
-          aria-label="Previous card"
+          onClick={() => {
+            // Stepping back off the first semasa line reopens the toy choice
+            // rather than skipping over it — that screen is a step, not a gate.
+            if (atSeam && interestDone) setInterestDone(false)
+            else if (i === 0) onQuit()
+            else setI((n) => Math.max(0, n - 1))
+          }}
+          aria-label="Back"
+          className="size-11 shrink-0"
         >
           <ArrowLeft className="size-5" />
         </Button>
@@ -297,6 +382,116 @@ export function ActivityPlayer({
         <SituationDrawer day={day} say={say} t={t} onClose={() => setDrawerOpen(false)} />
       )}
       {ccsOpen && <CcsDrawer day={day} say={say} t={t} onClose={() => setCcsOpen(false)} />}
+    </div>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * REKOD MINAT — the single most consequential tap in the programme.
+ *
+ * The PDF (H1): "REKOD MINAT: ☐ Barbie ☐ Masak-masak ☐ Lego → guna untuk
+ * H2–H14." Whatever is recorded here becomes the context of the next thirteen
+ * days: Day 2 says "GUNA MAINAN SAMA seperti Hari 1", Day 13 says "GUNA
+ * KONTEKS MINAT DARI H1".
+ *
+ * So the copy has to fight the one instinct that would ruin it — a parent
+ * recording the toy she WISHED he had picked. Hence "rekod apa yang dia PILIH,
+ * bukan apa yang anda harap."
+ */
+function InterestPicker({
+  t,
+  say,
+  childName,
+  selected,
+  onSelect,
+  onNext,
+  onBack,
+}: {
+  t: Copy
+  say: (s: string) => string
+  childName: string
+  /** The toy on record, if any. Highlighted, and changeable. */
+  selected?: Interest
+  onSelect: (i: Interest) => void
+  onNext: () => void
+  onBack: () => void
+}) {
+  const options: Interest[] = [...INTERESTS, "lain"]
+
+  return (
+    <div className="mx-auto flex h-full w-full max-w-md flex-col overflow-hidden px-5 py-4">
+      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto pt-2">
+        <div>
+          <p className="font-display text-xs font-semibold uppercase tracking-widest text-primary">
+            {t.recordTitle}
+          </p>
+          <h2 className="mt-1 font-display text-2xl font-bold leading-snug text-foreground">
+            {t.recordAsk(childName)}
+          </h2>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            {say(t.recordWhy)}
+          </p>
+        </div>
+
+        {/* Tapping SELECTS — it does not advance. Selecting used to jump straight
+            into the script, which made the choice feel irreversible the instant
+            a thumb slipped. Now the choice sits there, visibly hers, until she
+            confirms it. */}
+        <div className="space-y-2.5">
+          {options.map((id) => {
+            const active = selected === id
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => onSelect(id)}
+                aria-pressed={active}
+                className={cn(
+                  "flex w-full items-center gap-3 rounded-2xl border-[1.5px] px-4 py-3.5 text-left transition-all active:scale-[0.99]",
+                  active
+                    ? "border-primary bg-primary/10"
+                    : "border-border bg-card hover:border-primary/40 hover:bg-primary/5"
+                )}
+              >
+                <span
+                  className={cn(
+                    "flex size-5 shrink-0 items-center justify-center rounded-full border-[1.5px] transition-colors",
+                    active ? "border-primary bg-primary" : "border-border"
+                  )}
+                >
+                  {active && (
+                    <Check className="size-3 text-primary-foreground" strokeWidth={3} />
+                  )}
+                </span>
+                <span className="text-sm font-semibold text-foreground">{t.toys[id]}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="mt-4 flex shrink-0 items-center gap-2">
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={onBack}
+          aria-label="Back"
+          className="size-11 shrink-0"
+        >
+          <ArrowLeft className="size-5" />
+        </Button>
+        <Button
+          className="flex-1"
+          size="lg"
+          disabled={selected === undefined}
+          onClick={onNext}
+        >
+          {t.next}
+          <ArrowRight className="size-4" />
+        </Button>
+      </div>
     </div>
   )
 }
@@ -367,14 +562,21 @@ function LineCard({
         {say(line.text)}
       </p>
 
+      {/* NADA — how to SAY the line, not what to say.
+          The tags used to float unlabelled under the sentence, so a parent had no
+          way to know they were about her voice rather than more words to read.
+          The chip names them. */}
       {line.tone_tags?.length ? (
-        <div className="mt-4 flex flex-wrap justify-center gap-1.5">
-          {line.tone_tags.map((t) => (
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5">
+          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
+            {t.tone}
+          </span>
+          {line.tone_tags.map((tag) => (
             <span
-              key={t}
+              key={tag}
               className="rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground"
             >
-              {t}
+              {tag}
             </span>
           ))}
         </div>
@@ -484,6 +686,8 @@ function CcsDrawer({
           </Card>
         )}
 
+        {/* Each tier is a line the parent has to SAY, in a particular tone. The
+            mode is called "Skrip & Nada" — this is the nada half. */}
         <div className="space-y-2.5 pb-4">
           {day.ccs_prompts.map((p) => (
             <Card key={p.ccs} className="p-4">
@@ -491,9 +695,10 @@ function CcsDrawer({
                 <span className="rounded-full bg-primary/10 px-2.5 py-0.5 font-display text-[11px] font-bold text-primary">
                   {CCS_LABELS[p.ccs] ?? p.ccs}
                 </span>
-                <span className="text-xs font-semibold text-muted-foreground">
+                <span className="min-w-0 flex-1 truncate text-xs font-semibold text-muted-foreground">
                   {p.technique}
                 </span>
+                <SpeakButton line={say(p.line)} rawLine={p.line} />
               </div>
               <p className="mt-2 text-sm leading-relaxed text-foreground">{say(p.line)}</p>
             </Card>

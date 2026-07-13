@@ -11,11 +11,28 @@ import {
   type StageCode,
 } from "@/lib/activities"
 import ProgressCalendar from "@/components/ProgressCalendar"
-import { DayPlayer } from "@/components/day/DayPlayer"
-import { SltBanner } from "@/components/day/SltBanner"
-import { TodaysActivityCard } from "@/components/day/TodaysActivityCard"
-import { dayConfig } from "@/content/days"
+import { DayPlayer } from "@/components/preverb/DayPlayer"
+import { SltBanner } from "@/components/preverb/SltBanner"
+import { TodaysActivityCard } from "@/components/preverb/TodaysActivityCard"
+import { dayConfig } from "@/content/preverb"
+import {
+  endPreverbRun,
+  loadPreverbInterest,
+  loadTrackerAnswers,
+  saveReflection,
+  saveTrackerAnswer,
+  markPreverbRunCompleted,
+  savePreverbInterest,
+  startPreverbRun,
+  tickPreverbRun,
+  type PreverbProgress,
+  type PreverbRunHandle,
+  type Reflection,
+  type TrackerAnswer,
+} from "@/lib/preverbDb"
+import { type Interest, type ObservationQuestion } from "@/lib/preverbConfig"
 import { type Vars } from "@/lib/interpolate"
+import { GOAL_BASE_ENABLED } from "@/lib/config"
 import { formatDuration } from "@/lib/progress"
 import { getAacVoice } from "@/lib/voice"
 import {
@@ -50,6 +67,9 @@ const PURPLE_TEXT = "258 55% 42%" // lighter readable purple text
 /** Minimum seconds on the AAC board before the activity can be completed.
  *  (Testing value — may be increased later.) */
 const AAC_MIN_SECONDS = 15
+
+/* Goal Base is this file. Gated on the shared flag — see lib/config.ts. */
+const SHOW_GOAL_BASE = GOAL_BASE_ENABLED
 
 /* -------------------------------------------------------------------------- */
 /*  Co-located UI chrome strings (screen/board furniture). Activity content    */
@@ -254,12 +274,15 @@ export default function ActivityLibrary({
   relationship = "Ibu Bapa",
   childName,
   panggilan,
+  childId,
   sltBanner = false,
   onDismissSlt,
   routines = [],
   activityCodes = [],
   records,
   onSaveRecord,
+  progress,
+  onProgressChange,
 }: {
   childStage?: number
   /** Guardian's relationship to the child (e.g. "Bapa"); labels the guidance. */
@@ -268,6 +291,8 @@ export default function ActivityLibrary({
   childName?: string
   /** {panggilan} — what the child calls this parent ("Ibu", "Nenek", "Mak Long"). */
   panggilan?: string
+  /** The Preverb child — day sessions are written against it. */
+  childId?: string | null
   /** Show the SLT recommendation (spec §5.1). */
   sltBanner?: boolean
   onDismissSlt?: () => void
@@ -280,6 +305,10 @@ export default function ActivityLibrary({
   records: Record<string, ActivityRecord>
   /** Save/update a completion record (note + optional seconds). */
   onSaveRecord: (code: string, note: string, seconds?: number) => void
+  /** The family's real Preverb history — drives "Kemajuan {bulan}". */
+  progress: PreverbProgress
+  /** Re-read the history after a run, so the calendar updates on close. */
+  onProgressChange: () => void
 }) {
   const { lang } = useLang()
   const s = STR[lang]
@@ -288,13 +317,33 @@ export default function ActivityLibrary({
   const [routineFilter, setRoutineFilter] = useState<string>("all")
   const [openCode, setOpenCode] = useState<string | null>(null)
 
-  // ── The 14-day programme ────────────────────────────────────────────────
-  // Open = the day player is running full-screen over the library.
+  // ── PREVERB · the 14-day programme ──────────────────────────────────────
+  // Open = the day player is running full-screen over Goal Base.
   const [dayOpen, setDayOpen] = useState(false)
+  // The session + run rows for the day currently open.
+  const [run, setRun] = useState<PreverbRunHandle | null>(null)
+
+  // The toy the child chose on Day 1 — the context for every day after it.
+  // Loaded up front so a family returning on Day 2 already has their Barbie.
+  const [interest, setInterest] = useState<Interest | undefined>(undefined)
+  useEffect(() => {
+    if (!childId) return
+    void loadPreverbInterest(childId).then((i) =>
+      setInterest((i as Interest | null) ?? undefined)
+    )
+  }, [childId])
+
 
   // Which content day the parent is on. There is no day_session table yet, so
   // "today" is simply Day 1 for everyone — this becomes a real lookup in Phase 2.
   const today = dayConfig(1)
+  // Tracker answers already on record for today's day — so a parent who was
+  // interrupted at question 7 resumes at question 7, not at question 1.
+  const [trackerAnswers, setTrackerAnswers] = useState<Record<string, TrackerAnswer>>({})
+  useEffect(() => {
+    if (!childId || today?.kind !== "activity") return
+    void loadTrackerAnswers(childId, today.day_number).then(setTrackerAnswers)
+  }, [childId, today])
 
   const dayVars: Vars = {
     anak: childName?.trim() || "anak anda",
@@ -346,16 +395,12 @@ export default function ActivityLibrary({
   return (
     <div className="flex h-full flex-col">
       {/* Scrollable catalogue */}
-      <div className="flex-1 overflow-y-auto px-4 pb-28 pt-5 md:px-8 md:pt-6">
+      <div className={cn("flex-1 overflow-y-auto px-4 pt-5 md:px-8 md:pt-6", SHOW_GOAL_BASE ? "pb-28" : "pb-8")}>
         <div className="mx-auto max-w-5xl space-y-5">
-          {/* Current-month progress calendar — only real completions show;
-              past days stay neutral (no placeholder data) until truly done. */}
-          <ProgressCalendar
-            todayCompleted={completedCount}
-            todaySeconds={todaySeconds}
-            samplePast={false}
-            collapsible
-          />
+          {/* "Kemajuan {bulan}" — the family's real month, from Preverb runs.
+              It counts TIME, not activities: one activity per day, repeatable,
+              so the number worth showing is the clock. */}
+          <ProgressCalendar progress={progress} collapsible />
 
           {/* ── AKTIVITI HARI INI · the 14-day programme ──────────────────
               Sits between the calendar and the picker, and will eventually
@@ -372,68 +417,76 @@ export default function ActivityLibrary({
               patiently below — an open door, not a summons. */}
           {sltBanner && onDismissSlt && <SltBanner onDismiss={onDismissSlt} />}
 
-          <p className="text-sm text-muted-foreground">
-            {s.intro}
-          </p>
+              {/* ── GOAL BASE — hidden for the pilot. See SHOW_GOAL_BASE. ── */}
+          {SHOW_GOAL_BASE && (
+            <>
+              <p className="text-sm text-muted-foreground">{s.intro}</p>
 
-          {/* Routine filter */}
-          <div className="mt-4 flex flex-wrap gap-2">
+              {/* Routine filter */}
+              <div className="mt-4 flex flex-wrap gap-2">
             <FilterChip
               label={s.filterAll}
               active={routineFilter === "all"}
               onClick={() => setRoutineFilter("all")}
             />
-            {routineOptions.map((r) => (
-              <FilterChip
-                key={r}
-                label={ROUTINE_LABELS[r] ? pick(ROUTINE_LABELS[r], lang) : r}
-                active={routineFilter === r}
-                onClick={() => setRoutineFilter(r)}
-              />
-            ))}
-          </div>
+                {routineOptions.map((r) => (
+                  <FilterChip
+                    key={r}
+                    label={ROUTINE_LABELS[r] ? pick(ROUTINE_LABELS[r], lang) : r}
+                    active={routineFilter === r}
+                    onClick={() => setRoutineFilter(r)}
+                  />
+                ))}
+              </div>
 
-          {/* Activity grid */}
-          {visible.length > 0 ? (
-            <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {visible.map((activity) => (
-                <ActivityCard
-                  key={activity.code}
-                  activity={activity}
-                  completed={!!records[activity.code]}
-                  focused={focusedCode === activity.code}
-                  onOpen={() => {
-                    setFocusedCode(activity.code)
-                    setOpenCode(activity.code)
-                  }}
-                />
-              ))}
-            </div>
-          ) : (
-            <p className="mt-10 text-center text-sm text-muted-foreground">
-              {s.emptyState}
-            </p>
+              {/* Activity grid */}
+              {visible.length > 0 ? (
+                <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {visible.map((activity) => (
+                    <ActivityCard
+                      key={activity.code}
+                      activity={activity}
+                      completed={!!records[activity.code]}
+                      focused={focusedCode === activity.code}
+                      onOpen={() => {
+                        setFocusedCode(activity.code)
+                        setOpenCode(activity.code)
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-10 text-center text-sm text-muted-foreground">
+                  {s.emptyState}
+                </p>
+              )}
+            </>
           )}
         </div>
       </div>
 
-      {/* Sticky daily summary — completed count + total time spent today */}
-      <div className="shrink-0 border-t border-border/60 bg-background/80 px-4 py-3 backdrop-blur-xl md:px-8">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-sm">
-            <Check className="h-4 w-4" style={{ color: `hsl(${TEAL})` }} strokeWidth={3} />
-            <span className="font-medium">
-              {s.activitiesDoneToday(completedCount)}
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5 text-sm font-semibold">
-            <Clock className="h-4 w-4" style={{ color: `hsl(${TEAL})` }} />
-            <span style={{ color: `hsl(${TEAL})` }}>
-              {formatDuration(todaySeconds)}
-            </span>
+      {/* Sticky daily summary — GOAL BASE's counters ("0 aktiviti selesai hari
+          ini · 0 saat"). They count Goal Base completions, NOT Preverb days, so
+          with Goal Base hidden they would sit at zero forever — which reads as
+          "you've done nothing today" to a parent who just finished Preverb Day 1. */}
+      {SHOW_GOAL_BASE && (
+        <div className="shrink-0 border-t border-border/60 bg-background/80 px-4 py-3 backdrop-blur-xl md:px-8">
+          <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm">
+              <Check className="h-4 w-4" style={{ color: `hsl(${TEAL})` }} strokeWidth={3} />
+              <span className="font-medium">
+                {s.activitiesDoneToday(completedCount)}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 text-sm font-semibold">
+              <Clock className="h-4 w-4" style={{ color: `hsl(${TEAL})` }} />
+              <span style={{ color: `hsl(${TEAL})` }}>
+                {formatDuration(todaySeconds)}
+              </span>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Detail modal */}
       {openActivity && (
@@ -451,13 +504,60 @@ export default function ActivityLibrary({
       )}
 
       {/* The 14-day day player — full-screen over the library.
-          Nothing it produces is persisted yet: there is no day_session table,
-          so a completed Day 1 leaves no trace. That lands in Phase 2. */}
+          The clock inside it is what "masa bersama anak" is made of. */}
       {dayOpen && today?.kind === "activity" && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-background">
+        <div className="fixed inset-0 z-50 overflow-hidden bg-background">
           <DayPlayer
             day={today}
             vars={dayVars}
+            interest={interest}
+            onInterestRecorded={(pick) => {
+              setInterest(pick)
+              if (childId) void savePreverbInterest(childId, pick)
+            }}
+            onReflection={(r: Reflection) => {
+              // The LEADING indicator. Written when she finishes C17 — and if she
+              // said "perlukan bantuan", saveReflection() raises the support_trigger
+              // in the same breath. A parent who asks for help must not depend on
+              // her reaching a celebration screen to be heard.
+              if (childId && today?.kind === "activity") {
+                void saveReflection(childId, run?.sessionId ?? null, today.day_number, r)
+              }
+            }}
+            trackerAnswers={trackerAnswers}
+            onTrackerAnswer={(q: ObservationQuestion, a: TrackerAnswer) => {
+              // Optimistic, then persisted. Every screen, not at the end (§5.8):
+              // where she STOPS is itself the finding.
+              setTrackerAnswers((prev) => ({ ...prev, [q.question_id]: a }))
+              if (childId && today?.kind === "activity") {
+                void saveTrackerAnswer(childId, run?.sessionId ?? null, today.day_number, q, a)
+              }
+            }}
+            onActivityStart={() => {
+              // The run opens when the ACTIVITY does, not when the card does.
+              // Opening it on the card would turn a parent reading what today
+              // asks of her — and deciding now is not the moment — into a
+              // four-second run, and mark her day "belum selesai" for looking.
+              //
+              // It still opens at the START, not on completion: a parent who
+              // closes the tab mid-activity has spent that time with her child,
+              // and a write-at-the-end design would erase her.
+              if (childId && today?.kind === "activity") {
+                void startPreverbRun(childId, today).then(setRun)
+              }
+            }}
+            onActivityDone={() => {
+              // Written the moment they finish, not on exit — a parent who
+              // completes and then closes the tab has still completed.
+              if (run) void markPreverbRunCompleted(run)
+            }}
+            onHeartbeat={(seconds) => {
+              if (run) void tickPreverbRun(run.runId, seconds)
+            }}
+            onEnd={(seconds) => {
+              if (run) void endPreverbRun(run.runId, seconds).then(onProgressChange)
+              setRun(null)
+            }}
             onExit={() => setDayOpen(false)}
           />
         </div>

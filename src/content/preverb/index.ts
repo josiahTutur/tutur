@@ -1,5 +1,5 @@
 /* ========================================================================== *
- *  Day-config registry — the 14 days of Modul 1.
+ *  PREVERB · Day-config registry — the 14 days of Modul 1.
  *
  *  Each JSON is type-checked against `AnyDayConfig` at COMPILE time by the
  *  `satisfies` clauses below. A content file that drifts from the schema fails
@@ -10,7 +10,7 @@
  *  `scripts/validate-content.ts`.
  * ========================================================================== */
 
-import { type AnyDayConfig, type DayConfig, type RecapConfig } from "@/lib/dayConfig"
+import { type AnyDayConfig, type DayConfig, type RecapConfig } from "@/lib/preverbConfig"
 
 import day01 from "./day-01"
 

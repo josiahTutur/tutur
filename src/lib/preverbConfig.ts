@@ -1,5 +1,7 @@
 /* ========================================================================== *
- *  Per-day content config — the schema for Modul 1 (Mula Berhubung), D1–D14.
+ *  PREVERB · Per-day content config — the schema for Modul 1 (Mula Berhubung),
+ *  D1–D14. Parents see this system as "Fasa Asas"; in code it is PREVERB.
+ *  (The other activity system is GOAL BASE — see ActivityLibrary.tsx.)
  *
  *  The app ships ONE generic "day player"; days 1–14 are pure data. Content
  *  owns the JSON in `src/content/days/`; engineering owns the player.
@@ -129,20 +131,44 @@ export interface ChildSignalGroup {
 }
 
 /**
- * A tracker question (screens C5–C14). Max 6 per day: 1 parent indicator
- * (role: "parent_indicator") + 5 child observations.
+ * A tracker question (screens C5–C14). Ten per day, in the PDF's own order:
+ *
+ *   1      parent_indicator   the G1 leading indicator          scale: bmk
+ *   2–6    child_observation  the five KP rows                  scale: bmk
+ *   7      ccs                "CCS anak: CCS1…CCS5"             scale: ccs
+ *   8      ja                 "Joint Attention: T1…T5"          scale: ja
+ *   9      new_words          "Kata/bunyi/isyarat BARU"         scale: text
+ *   10     routine_ran        "Rutin berjalan"                  scale: rutin
+ *
+ * CCS IS ASKED, NOT DERIVED. Maya script v2 said it was inferred; every tracker
+ * sheet in the SLT document has `CCS anak: [_] CCS1 … [_] CCS5` as a box the
+ * parent ticks. The document wins — we do not have a validated derivation, and
+ * inventing one would put a fabricated clinical stage in an SLT's hands.
  *
  * NOTE: `category` may REPEAT within a day (e.g. Day 4 has KP6 twice). Always
  * key rows by `question_id`, never by category.
  */
+export type ObservationScale = "bmk" | "ccs" | "ja" | "text" | "rutin"
+
+/** "Rutin berjalan" — did the routine actually happen today? */
+export type RutinRating = "penuh" | "separuh" | "tidak_sempat"
+
 export interface ObservationQuestion {
   question_id: string
-  role: "parent_indicator" | "child_observation"
-  /** Absent for the parent indicator. */
+  role:
+    | "parent_indicator"
+    | "child_observation"
+    | "ccs"
+    | "ja"
+    | "new_words"
+    | "routine_ran"
+  /** Absent for everything but the five child rows. */
   category?: ObservationCategory
   /** Maya's wording. `{anak}` / `{panggilan}` / `{mainan}` are interpolated. */
   text: string
-  scale: "bmk"
+  scale: ObservationScale
+  /** Sits under the question — why we are asking, or how to tell. */
+  hint?: string
   /** First Muncul/Konsisten answer auto-creates this milestone_event. */
   milestone_on_positive?: string
 }
@@ -302,12 +328,34 @@ export type AnyDayConfig = DayConfig | RecapConfig
 export const INTERESTS = ["barbie", "masak_masak", "lego"] as const
 export type Interest = (typeof INTERESTS)[number] | "lain"
 
+/** What the parent sees. The stored value stays the enum. */
+export const INTEREST_LABELS: Record<Interest, { ms: string; en: string }> = {
+  barbie: { ms: "Anak patung / Barbie", en: "Doll / Barbie" },
+  masak_masak: { ms: "Masak-masak", en: "Play kitchen" },
+  lego: { ms: "Lego / Blok", en: "Lego / Blocks" },
+  lain: { ms: "Lain-lain", en: "Something else" },
+}
+
 /** Malay labels for the BMK scale (canonical — stored values are the keys). */
 export const BMK_LABELS: Record<BmkRating, string> = {
   belum: "Belum",
   muncul: "Muncul",
   konsisten: "Konsisten",
 }
+
+/** "Rutin berjalan" labels. Stored values stay the keys. */
+export const RUTIN_LABELS: Record<RutinRating, string> = {
+  penuh: "Penuh",
+  separuh: "Separuh",
+  tidak_sempat: "Tidak sempat",
+}
+
+/** The five CCS stages, as the parent ticks them. NOT the CCS4_5 prompt tier. */
+export const CCS_LEVELS = ["CCS1", "CCS2", "CCS3", "CCS4", "CCS5"] as const
+export type CcsLevel = (typeof CCS_LEVELS)[number]
+
+/** The JA ladder, in order. Descriptors come from the day's `ja_descriptors`. */
+export const JA_LEVELS = ["JA1", "JA2", "JA3", "JA4", "JA5"] as const
 
 /** Human labels for the 8 KPs. */
 export const KP_LABELS: Record<KpCode, string> = {

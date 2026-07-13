@@ -1,4 +1,4 @@
-import { type DayConfig } from "@/lib/dayConfig"
+import { type DayConfig } from "@/lib/preverbConfig"
 
 /**
  * HARI 1 · Masa Bermain Bebas — Kenal Pasti Minat
@@ -18,7 +18,7 @@ const day01 = {
 
   "pyramid_thread": ["connection", "joint_attention"],
   "kp_active": ["KP1", "KP2", "KP4", "KP7"],
-  "shared_enjoyment": "Senyum besar dan buat muka terkejut bila {anak} pilih!",
+  "shared_enjoyment": "Senyum, surprise bila {anak} pilih mainan",
 
   "sub_goal": "Kenal pasti MINAT {anak} sebagai konteks aktiviti 14 hari",
   "skills_today": ["Self Talk", "Parallel Talk", "Withhold & Wait"],
@@ -52,7 +52,7 @@ const day01 = {
   "prep_items": [
     {
       "item_id": "tiga_mainan",
-      "name": "3 mainan berbeza (cth: anak patung, masak-masak, Lego)",
+      "name": "3 mainan berbeza",
       "always_available": false,
       "advance_notice_days": 1,
       "substitutable": true,
@@ -70,11 +70,11 @@ const day01 = {
     {
       "phase": "persediaan",
       "lines": [
-        { "text": "{panggilan} letak tiga mainan", "tone_tags": ["santai", "perlahan"], "audio_id": "a_d1_01" },
-        { "text": "{panggilan} duduk sini", "tone_tags": ["santai"], "audio_id": "a_d1_02" },
+        { "text": "{panggilan} letak tiga mainan", "tone_tags": ["Santai", "Perlahan"], "audio_id": "a_d1_01" },
+        { "text": "{panggilan} duduk sini", "tone_tags": ["Santai"], "audio_id": "a_d1_02" },
         {
           "text": "{anak}, pilih ye",
-          "tone_tags": ["ceria", "jemput"],
+          "tone_tags": ["Ceria", "Mengajak"],
           "audio_id": "a_d1_03",
           "timer_seconds": 5,
           "timer_label": "Tunggu… biar {anak} pilih sendiri"
@@ -84,39 +84,39 @@ const day01 = {
     {
       "phase": "semasa",
       "lines": [
-        { "text": "(Perhatikan mainan yang {anak} pilih — ikut dia)", "tone_tags": ["perhati"] }
+        { "text": "(Perhatikan mainan yang {anak} pilih — ikut dia)" }
       ],
       "interest_lines": {
         "barbie": [
-          { "text": "{panggilan} ambil Barbie", "tone_tags": ["naratif"], "audio_id": "a_d1_b1" },
-          { "text": "Barbie cantik!", "tone_tags": ["ceria"], "audio_id": "a_d1_b2" },
-          { "text": "Barbie jalan, jalan", "tone_tags": ["berirama"], "audio_id": "a_d1_b3" },
-          { "text": "Sikat rambut… siap!", "tone_tags": ["santai"], "audio_id": "a_d1_b4" },
-          { "text": "Barbie tidur. Shhh", "tone_tags": ["lembut"], "audio_id": "a_d1_b5" }
+          { "text": "{panggilan} ambil Barbie", "tone_tags": ["Bercerita"], "audio_id": "a_d1_b1" },
+          { "text": "Barbie cantik!", "tone_tags": ["Ceria"], "audio_id": "a_d1_b2" },
+          { "text": "Barbie jalan, jalan", "tone_tags": ["Berlagu"], "audio_id": "a_d1_b3" },
+          { "text": "Sikat rambut… siap!", "tone_tags": ["Santai"], "audio_id": "a_d1_b4" },
+          { "text": "Barbie tidur. Shhh", "tone_tags": ["Lembut"], "audio_id": "a_d1_b5" }
         ],
         "masak_masak": [
-          { "text": "{panggilan} ambil periuk", "tone_tags": ["naratif"], "audio_id": "a_d1_m1" },
-          { "text": "Periuk kecik", "tone_tags": ["santai"], "audio_id": "a_d1_m2" },
-          { "text": "Kita masak!", "tone_tags": ["ceria"], "audio_id": "a_d1_m3" },
-          { "text": "Kacau, kacau", "tone_tags": ["berirama"], "audio_id": "a_d1_m4" },
-          { "text": "Nyum, sedap!", "tone_tags": ["lebih-lebih"], "audio_id": "a_d1_m5" }
+          { "text": "{panggilan} ambil periuk", "tone_tags": ["Bercerita"], "audio_id": "a_d1_m1" },
+          { "text": "Periuk kecik", "tone_tags": ["Santai"], "audio_id": "a_d1_m2" },
+          { "text": "Kita masak!", "tone_tags": ["Ceria"], "audio_id": "a_d1_m3" },
+          { "text": "Kacau, kacau", "tone_tags": ["Berlagu"], "audio_id": "a_d1_m4" },
+          { "text": "Nyum, sedap!", "tone_tags": ["Melebih-lebih"], "audio_id": "a_d1_m5" }
         ],
         "lego": [
-          { "text": "{panggilan} ambil Lego", "tone_tags": ["naratif"], "audio_id": "a_d1_l1" },
-          { "text": "Lego merah, besar", "tone_tags": ["santai"], "audio_id": "a_d1_l2" },
-          { "text": "Susun… satu, dua", "tone_tags": ["berirama"], "audio_id": "a_d1_l3" },
-          { "text": "Tinggi! Tinggi lagi", "tone_tags": ["ceria"], "audio_id": "a_d1_l4" },
-          { "text": "Uh oh, jatuh!", "tone_tags": ["terkejut"], "audio_id": "a_d1_l5" }
+          { "text": "{panggilan} ambil Lego", "tone_tags": ["Bercerita"], "audio_id": "a_d1_l1" },
+          { "text": "Lego merah, besar", "tone_tags": ["Santai"], "audio_id": "a_d1_l2" },
+          { "text": "Susun… satu, dua", "tone_tags": ["Berlagu"], "audio_id": "a_d1_l3" },
+          { "text": "Tinggi! Tinggi lagi", "tone_tags": ["Ceria"], "audio_id": "a_d1_l4" },
+          { "text": "Uh oh, jatuh!", "tone_tags": ["Terkejut"], "audio_id": "a_d1_l5" }
         ]
       }
     },
     {
       "phase": "selesai",
       "lines": [
-        { "text": "Dah habis main", "tone_tags": ["lembut"], "audio_id": "a_d1_s1" },
-        { "text": "Letak mainan", "tone_tags": ["santai"], "audio_id": "a_d1_s2" },
-        { "text": "Masuk dalam kotak", "tone_tags": ["santai"], "audio_id": "a_d1_s3" },
-        { "text": "Bye-bye mainan", "tone_tags": ["lambai"], "audio_id": "a_d1_s4" }
+        { "text": "Dah habis main", "tone_tags": ["Lembut"], "audio_id": "a_d1_s1" },
+        { "text": "Letak mainan", "tone_tags": ["Santai"], "audio_id": "a_d1_s2" },
+        { "text": "Masuk dalam kotak", "tone_tags": ["Santai"], "audio_id": "a_d1_s3" },
+        { "text": "Bye-bye mainan", "tone_tags": ["Ceria"], "audio_id": "a_d1_s4" }
       ]
     }
   ],
@@ -255,6 +255,34 @@ const day01 = {
       "text": "{anak} hulur mainan kepada anda?",
       "scale": "bmk",
       "milestone_on_positive": "proto_imperative"
+    },
+
+    {
+      "question_id": "d1_ccs",
+      "role": "ccs",
+      "text": "Hari ini, macam mana {anak} berkomunikasi dengan anda?",
+      "hint": "Ini bukan markah dan bukan ujian. Ia cuma menunjukkan cara {anak} berkomunikasi SEKARANG, supaya anda boleh sesuaikan cara anda bercakap. Penanda aras anda ialah {anak} sendiri pada Hari 1.",
+      "scale": "ccs"
+    },
+    {
+      "question_id": "d1_ja",
+      "role": "ja",
+      "text": "Tahap perhatian bersama {anak} hari ini?",
+      "hint": "Pilih yang PALING TINGGI yang anda nampak hari ini — walaupun sekali sahaja.",
+      "scale": "ja"
+    },
+    {
+      "question_id": "d1_kata_baru",
+      "role": "new_words",
+      "text": "Ada kata, bunyi atau isyarat BARU hari ini?",
+      "hint": "Apa-apa yang anda tak pernah dengar atau nampak sebelum ini — walaupun bukan perkataan sebenar.",
+      "scale": "text"
+    },
+    {
+      "question_id": "d1_rutin",
+      "role": "routine_ran",
+      "text": "Rutin hari ini berjalan macam mana?",
+      "scale": "rutin"
     }
   ],
 

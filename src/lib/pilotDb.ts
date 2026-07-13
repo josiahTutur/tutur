@@ -14,23 +14,23 @@
 import { supabase } from "@/lib/supabase"
 import { type OnboardingResult } from "@/components/onboarding/OnboardingFlow"
 
-/**
- * Stand-in values for the parts of the old model the hub still reads.
+/* ──────────────────────────────────────────────────────────────────────────
+ *  REMOVED: PILOT_DEFAULTS.
  *
- * The 14-day programme has no stage, no goal picker and no activity curation —
- * but DashboardHub / ActivityLibrary still expect them, and the parent needs a
- * working dashboard today. So we seed sensible constants rather than block.
+ *  Preverb used to write fake Goal Base data onto every family — stage 3, goal
+ *  G1, four routines and six activities — none of which the parent was ever
+ *  asked for, and none of which anything measured. It existed only so Goal Base's
+ *  screens wouldn't crash on a null.
  *
- * ⚠ THIS IS FAKE DATA. `stage` in particular is NOT measured — the screening
- * cannot produce one (see docs/PILOT_EXECUTION_PLAN.md §3.3). Do not report on
- * it, and do not let it reach the SLT export.
- */
-export const PILOT_DEFAULTS = {
-  stage: 3,
-  goal: "G1",
-  routines: ["R1", "R2", "R3", "R9"],
-  activities: ["A1", "A2", "A3", "A4", "A5", "A6"],
-} as const
+ *  Goal Base is now off (GOAL_BASE_ENABLED), so nothing reads those columns. They
+ *  are left NULL for Preverb families, which is the truth: this family has no
+ *  goal, no curated routines, and above all NO STAGE — the screening cannot
+ *  produce one, and a fabricated 3 sitting in a clinical column is exactly the
+ *  kind of thing that ends up in an SLT export.
+ *
+ *  Preverb records its OWN goal/routine/activity — per DAY, snapshotted from the
+ *  content, in preverb_day_session. See lib/preverbDb.ts.
+ * ────────────────────────────────────────────────────────────────────────── */
 
 /** Malay labels for the A3 buckets — what the legacy `children.age` column shows. */
 const AGE_LABELS: Record<string, string> = {
@@ -80,14 +80,13 @@ export async function savePilotOnboarding(
   if (vaultErr) return { ok: false, error: `vault: ${vaultErr.message}` }
 
   // 2 ── Guardian row. `relationship` and the age BUCKET are not identifying.
+  // Goal Base columns (primary_goal / routines / activities) are deliberately
+  // NOT written. A Preverb family has none of those things.
   const { error: profErr } = await supabase.from("profiles").upsert({
     id: uid,
     guardian_name: r.parentName, // legacy column — ProfileView still reads it
     relationship: r.relationship,
     guardian_age: r.parentAge,
-    primary_goal: PILOT_DEFAULTS.goal,
-    routines: PILOT_DEFAULTS.routines,
-    activities: PILOT_DEFAULTS.activities,
     updated_at: new Date().toISOString(),
   })
   if (profErr) return { ok: false, error: `profile: ${profErr.message}` }
@@ -110,11 +109,9 @@ export async function savePilotOnboarding(
     panggilan: r.panggilan,
     // What the child HEARS at home — a clinical input, not a UI preference.
     home_language: r.homeLanguage,
-    stage: PILOT_DEFAULTS.stage, // ⚠ fake — see PILOT_DEFAULTS
+    // stage / primary_goal / routines / activities are Goal Base columns and stay
+    // NULL. The screening cannot produce a stage; inventing one would be fiction.
     profiled_at: new Date().toISOString().slice(0, 10),
-    primary_goal: PILOT_DEFAULTS.goal,
-    routines: PILOT_DEFAULTS.routines,
-    activities: PILOT_DEFAULTS.activities,
     onboarded_at: new Date().toISOString(),
   }
 

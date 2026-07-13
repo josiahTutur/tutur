@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Bot,
   Bell,
@@ -25,6 +25,13 @@ import {
   Moon,
   Sun,
 } from "lucide-react"
+import { GOAL_BASE_ENABLED } from "@/lib/config"
+import {
+  foldRunsByDate,
+  loadPreverbRuns,
+  type PreverbProgress,
+} from "@/lib/preverbDb"
+import { MayaFaq } from "@/components/preverb/MayaFaq"
 import { cn } from "@/lib/utils"
 import { useT, useLang, pick, type Lang } from "@/lib/i18n"
 import { useTheme } from "@/lib/theme"
@@ -120,10 +127,19 @@ const NAV_ITEMS: ReadonlyArray<{
   adminOnly?: boolean
   /** Parent-facing — hidden from admins, who run the system, not the app. */
   parentOnly?: boolean
+  /**
+   * Belongs to the GOAL BASE era. Hidden while GOAL_BASE_ENABLED is false, but
+   * the code and the destination are untouched — flipping the flag brings the
+   * whole tab back exactly as it was.
+   */
+  goalBase?: boolean
 }> = [
   { id: "aktiviti", label: "Aktiviti Harian", icon: Library, parentOnly: true },
-  { id: "ai", label: "Panduan AI", icon: BrainCircuit, parentOnly: true },
-  { id: "aac", label: "Papan", icon: LayoutGrid, parentOnly: true },
+  // Panduan AI — Maya's scripted chat over the Goal Base activity set.
+  { id: "ai", label: "Panduan AI", icon: BrainCircuit, parentOnly: true, goalBase: true },
+  // Papan — the AAC board. Out of scope for the pilot (spec §1.2): store the
+  // diagnosis answer, render nothing.
+  { id: "aac", label: "Papan", icon: LayoutGrid, parentOnly: true, goalBase: true },
   {
     id: "analysis",
     label: "Analisis",
@@ -465,6 +481,7 @@ const FALLBACK_PROFILE: Profile = {
 
 export default function DashboardHub({
   profile,
+  childId,
   sltBanner = false,
   onDismissSlt,
   goal,
@@ -478,6 +495,8 @@ export default function DashboardHub({
   onAccountDeleted,
 }: {
   profile?: Profile
+  /** The Preverb child — day sessions are written against it. */
+  childId?: string | null
   /** Show the SLT recommendation (spec §5.1). Latest screening = variant B. */
   sltBanner?: boolean
   /** Parent closed it. Stays closed until a D7/D14 re-screen flags again. */
@@ -525,6 +544,19 @@ export default function DashboardHub({
   // surface updates them all. Key = activity code.
   const [records, setRecords] = useState<Record<string, ActivityRecord>>({})
 
+  // HELP · Maya's FAQ. Opened from the Maya avatar in the top bar (spec §2.1).
+  const [faqOpen, setFaqOpen] = useState(false)
+
+  // PREVERB · the family's real history — every day they practised and for how
+  // long. The single source for "Kemajuan {bulan}" and the Analisis heatmap, so
+  // the two can never disagree. Re-read when a run ends.
+  const [progress, setProgress] = useState<PreverbProgress>({})
+  const reloadProgress = useCallback(() => {
+    if (!childId) return
+    void loadPreverbRuns(childId).then((runs) => setProgress(foldRunsByDate(runs)))
+  }, [childId])
+  useEffect(reloadProgress, [reloadProgress])
+
   // Pull today's saved completions on mount so the calendar + summary reflect
   // what was already done today (e.g. after a refresh). No-op in the demo (no
   // signed-in user).
@@ -556,9 +588,6 @@ export default function DashboardHub({
       }
     })()
   }
-  const todayCompleted = Object.keys(records).length
-  const todaySeconds = Object.values(records).reduce((s, r) => s + r.seconds, 0)
-
   const guardianName = profile?.guardianName ?? s.guardianFallback
   const relationship = profile?.relationship ?? s.relationshipFallback
 
@@ -634,7 +663,9 @@ export default function DashboardHub({
           title={t.viewTitles[activeNav]}
           showStatus={activeNav === "ai"}
           onOpenMenu={() => setMenuOpen(true)}
-          onOpenAi={() => setActiveNav("ai")}
+          // The Maya avatar opens HELP (spec §2.1 — "header icon"), not the
+          // hidden Panduan AI tab it used to point at.
+          onOpenAi={() => setFaqOpen(true)}
         />
 
         <div className="relative min-h-0 flex-1">
@@ -653,6 +684,7 @@ export default function DashboardHub({
             <ActivityLibrary
               childStage={profile?.stage}
               relationship={profile?.relationship}
+              childId={childId}
               sltBanner={sltBanner}
               onDismissSlt={onDismissSlt}
               // {anak} / {panggilan} — spoken aloud in every 14-day script line.
@@ -662,6 +694,8 @@ export default function DashboardHub({
               activityCodes={activities}
               records={records}
               onSaveRecord={saveRecord}
+              progress={progress}
+              onProgressChange={reloadProgress}
             />
           </ViewLayer>
 
@@ -683,12 +717,7 @@ export default function DashboardHub({
                 className="pointer-events-none h-full select-none blur-md"
                 aria-hidden
               >
-                <AnalysisView
-                  profile={profile}
-                  goal={goal}
-                  todayCompleted={todayCompleted}
-                  todaySeconds={todaySeconds}
-                />
+                <AnalysisView profile={profile} goal={goal} progress={progress} />
               </div>
               <ComingSoonOverlay />
             </div>
@@ -751,6 +780,20 @@ export default function DashboardHub({
           </div>
         </div>
       )}
+
+      {/* HELP · Maya's FAQ — over everything, from anywhere in the hub. */}
+      {faqOpen && (
+        <MayaFaq
+          onClose={() => setFaqOpen(false)}
+          onAsk={(id) => {
+            // Phase 2: logEvent("faq_opened", { topic: id }). WHAT parents ask is
+            // a pilot finding in its own right — it shows where the programme is
+            // confusing, and which day's instructions aren't landing.
+            // eslint-disable-next-line no-console
+            console.debug("[event] faq_opened", { topic: id })
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -802,6 +845,7 @@ function NavRail({
   const profileActive = activeNav === "profile"
   const notificationActive = activeNav === "notification"
   const navItems = NAV_ITEMS.filter((item) => {
+    if (item.goalBase && !GOAL_BASE_ENABLED) return false // Panduan AI · Papan
     if (item.adminOnly) return isAdmin // Wawasan / Users — admins only
     if (item.parentOnly) return !isAdmin // parent tools — hidden from admins
     return true // shared (Tetapan)
