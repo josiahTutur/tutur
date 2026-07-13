@@ -31,12 +31,12 @@ language sql
 security definer
 set search_path = public
 stable
-as $$
+as $is_tester$
   select exists (
     select 1 from public.profiles
     where id = auth.uid() and role = 'tester'
   );
-$$;
+$is_tester$;
 
 grant execute on function public.is_tester() to authenticated;
 
@@ -55,7 +55,7 @@ returns void
 language plpgsql
 security definer
 set search_path = public, identity_vault
-as $$
+as $reset$
 declare
   uid uuid := auth.uid();
   r   text;
@@ -96,7 +96,7 @@ begin
          activities    = '{}'
    where id = uid;
 end;
-$$;
+$reset$;
 
 revoke execute on function public.reset_my_test_data() from public, anon;
 grant  execute on function public.reset_my_test_data() to authenticated;
@@ -117,14 +117,25 @@ grant  execute on function public.reset_my_test_data() to authenticated;
 --     its mail. Change the base address below if you use a different one.
 -- ===========================================================================
 --  ⚠ THE ADMIN IS NOT IN THIS LIST, AND MUST NOT BE.
---     josiahsoh@gmail.com stays 'admin'. `josiahsoh+josiah@gmail.com` is a
---     DIFFERENT Supabase user (the local part differs), so promoting it to
---     'tester' cannot touch the admin account. Four testers, one admin.
+--     josiahsoh@gmail.com stays 'admin'. Note that `josiah@gmail.com` and
+--     `josiahsoh+josiah@gmail.com` are BOTH different users from it — the local
+--     part differs — so neither can touch the admin account. Four testers, one
+--     admin, and the two never overlap.
+--
+--  Both forms are listed because the accounts may have been registered either
+--  way. An `in (...)` list that matches nothing updates zero rows and reports no
+--  error, which is exactly how the first run appeared to succeed and did nothing.
 update public.profiles p
    set role = 'tester'
   from auth.users u
  where u.id = p.id
-   and u.email in (
+   and lower(u.email) in (
+     -- as registered
+     'mahen@gmail.com',
+     'alum@gmail.com',
+     'azrena@gmail.com',
+     'josiah@gmail.com',
+     -- plus-addressed (safer: the mail lands in an inbox you control)
      'josiahsoh+mahen@gmail.com',
      'josiahsoh+alum@gmail.com',
      'josiahsoh+azrena@gmail.com',

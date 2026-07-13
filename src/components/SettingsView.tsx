@@ -31,6 +31,7 @@ import {
   Check,
   Clock,
   Copy,
+  AlertTriangle,
   Eye,
   EyeOff,
   FlaskConical,
@@ -180,9 +181,18 @@ const STR = {
     testerDesc:
       "Anda adalah penguji pilot. Butang ini memadam SEMUA data anda — anak, jawapan onboarding, dan semua kemajuan 14 hari — supaya anda boleh mula semula dari awal. Log masuk anda kekal.",
     testerBtn: "Padam data saya & mula semula",
-    testerConfirm:
-      "Padam semua data anda? Anak, jawapan onboarding dan semua kemajuan akan hilang. Log masuk anda kekal. Tindakan ini TIDAK boleh dibatalkan.",
-    testerDone: "Data dipadam. Memuat semula…",
+    testerDialogTitle: "Padam semua data anda?",
+    testerDialogDesc: "Tindakan ini tidak boleh dibatalkan.",
+    testerDialogLose: "Yang akan hilang:",
+    testerDialogItems: [
+      "Profil anak dan semua jawapan onboarding",
+      "Semua kemajuan 14 hari — aktiviti, tracker, refleksi",
+      "Semua masa yang direkodkan",
+    ],
+    testerDialogKeep: "Log masuk dan kata laluan anda kekal. Anda akan bermula semula dari skrin pertama onboarding.",
+    testerCancel: "Batal",
+    testerConfirmBtn: "Ya, padam semua",
+    testerDone: "Memadam…",
     testerFail: "Gagal memadam. Cuba lagi.",
     roleOwner: "Pemilik",
     roleParent: "Pasangan",
@@ -293,9 +303,18 @@ const STR = {
     testerDesc:
       "You are a pilot tester. This deletes ALL your data — your child, your onboarding answers, and every day of 14-day progress — so you can start over from scratch. Your login stays.",
     testerBtn: "Delete my data & start over",
-    testerConfirm:
-      "Delete all your data? Your child, onboarding answers and all progress will be gone. Your login stays. This CANNOT be undone.",
-    testerDone: "Data deleted. Reloading…",
+    testerDialogTitle: "Delete all your data?",
+    testerDialogDesc: "This cannot be undone.",
+    testerDialogLose: "What you'll lose:",
+    testerDialogItems: [
+      "Your child's profile and every onboarding answer",
+      "All 14-day progress — activities, tracker, reflections",
+      "Every minute recorded",
+    ],
+    testerDialogKeep: "Your login and password stay. You'll start again from the first onboarding screen.",
+    testerCancel: "Cancel",
+    testerConfirmBtn: "Yes, delete everything",
+    testerDone: "Deleting…",
     testerFail: "Delete failed. Try again.",
     roleOwner: "Owner",
     roleParent: "Partner",
@@ -452,6 +471,8 @@ export default function SettingsView({
   // Maintenance mode (admin only) — toggled optimistically, reverts on failure.
   const [maintenanceOn, setMaintenanceOn] = useState(false)
   const [resetting, setResetting] = useState(false)
+  const [resetOpen, setResetOpen] = useState(false)
+  const [resetError, setResetError] = useState(false)
   useEffect(() => {
     if (isAdmin) loadMaintenance().then(setMaintenanceOn)
   }, [isAdmin])
@@ -586,8 +607,31 @@ export default function SettingsView({
     setRoutineDialogOpen(false)
   }
 
+  async function runReset() {
+    setResetError(false)
+    setResetting(true)
+    const res = await resetTesterData()
+    if (!res.ok) {
+      setResetting(false)
+      setResetOpen(false)
+      setResetError(true)
+      return
+    }
+    // Hard reload: the whole app is holding the old family in state, and
+    // reconstructing that by hand is how you end up "reset" with a stale childId
+    // still in memory.
+    window.location.reload()
+  }
+
   return (
     <>
+    {resetOpen && (
+      <ResetTesterDialog
+        busy={resetting}
+        onConfirm={runReset}
+        onCancel={() => setResetOpen(false)}
+      />
+    )}
     <div className="h-full overflow-y-auto px-4 pb-28 pt-5 md:px-8 md:pt-6">
       <div className="mx-auto max-w-2xl space-y-6">
         {/* TESTER — a self-service wipe so a pilot tester can re-run the whole
@@ -603,25 +647,14 @@ export default function SettingsView({
             </p>
             <button
               type="button"
-              disabled={resetting}
-              onClick={async () => {
-                if (!window.confirm(s.testerConfirm)) return
-                setResetting(true)
-                const res = await resetTesterData()
-                if (!res.ok) {
-                  setResetting(false)
-                  window.alert(s.testerFail)
-                  return
-                }
-                // Hard reload: the whole app is holding the old family in state,
-                // and reconstructing that by hand is how you end up "reset" with
-                // a stale childId still in memory.
-                window.location.reload()
-              }}
-              className="w-full rounded-2xl border-[1.5px] border-destructive/40 bg-destructive/5 px-4 py-3 text-sm font-semibold text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50"
+              onClick={() => setResetOpen(true)}
+              className="w-full rounded-2xl border-[1.5px] border-destructive/40 bg-destructive/5 px-4 py-3 text-sm font-semibold text-destructive transition-colors hover:bg-destructive/10"
             >
-              {resetting ? s.testerDone : s.testerBtn}
+              {s.testerBtn}
             </button>
+            {resetError && (
+              <p className="mt-2 text-xs font-medium text-destructive">{s.testerFail}</p>
+            )}
           </Section>
         )}
 
@@ -1788,6 +1821,113 @@ function ToggleRow({
           )}
         />
       </button>
+    </div>
+  )
+}
+
+/* -------------------------------------------------------------------------- *
+ *  ResetTesterDialog — the wipe, confirmed properly.
+ *
+ *  This replaces `window.confirm()`. Not only because the browser dialog is ugly:
+ *  it is also unstyleable, unreadable on a phone, and — worst of all — it renders
+ *  a permanent deletion in exactly the same chrome as "allow notifications?", so
+ *  it gets dismissed on autopilot. A destructive action deserves a screen that
+ *  says what is about to be destroyed.
+ *
+ *  Hence the list. "Delete all your data?" is abstract; "your child's profile,
+ *  every onboarding answer, all 14 days" is a thing a person can actually weigh.
+ * -------------------------------------------------------------------------- */
+function ResetTesterDialog({
+  busy,
+  onConfirm,
+  onCancel,
+}: {
+  busy: boolean
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  // Resolved here, like the other dialogs in this file — `Copy` is taken by the
+  // lucide icon, so the copy table cannot be passed in as a typed prop.
+  const { lang } = useLang()
+  const s = STR[lang]
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={busy ? undefined : onCancel}
+        aria-hidden
+      />
+
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={s.testerDialogTitle}
+        className="relative flex w-full max-w-md animate-fade-up flex-col overflow-hidden rounded-t-3xl border border-foreground/10 bg-background/95 backdrop-blur-2xl sm:rounded-3xl"
+        style={{ animationFillMode: "both" }}
+      >
+        <div className="flex shrink-0 items-start gap-3 border-b border-border/60 px-5 py-4">
+          <div
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl"
+            style={{ background: "hsl(var(--destructive) / 0.12)" }}
+          >
+            <AlertTriangle className="h-5 w-5 text-destructive" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-base font-bold tracking-tight">{s.testerDialogTitle}</h2>
+            <p className="mt-0.5 text-xs font-medium text-destructive">
+              {s.testerDialogDesc}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            aria-label={s.close}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground disabled:opacity-40"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="space-y-3 px-5 py-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+            {s.testerDialogLose}
+          </p>
+          <ul className="space-y-2">
+            {s.testerDialogItems.map((item: string) => (
+              <li key={item} className="flex items-start gap-2.5 text-sm text-foreground">
+                <X className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                <span className="leading-snug">{item}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="rounded-2xl bg-foreground/[0.05] p-3 text-xs leading-relaxed text-muted-foreground">
+            {s.testerDialogKeep}
+          </p>
+        </div>
+
+        <div className="flex shrink-0 gap-2 border-t border-border/60 px-5 py-4">
+          {/* Cancel is the WIDER, calmer button. The destructive one should never
+              be the easiest thing to hit by accident. */}
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="flex-1 rounded-2xl border-[1.5px] border-border px-4 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-foreground/5 disabled:opacity-40"
+          >
+            {s.testerCancel}
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className="flex-1 rounded-2xl bg-destructive px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+          >
+            {busy ? s.testerDone : s.testerConfirmBtn}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
