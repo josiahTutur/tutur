@@ -110,39 +110,42 @@ grant  execute on function public.reset_my_test_data() to authenticated;
 --     to be ON while you do, and MAINTENANCE hides the sign-up switch in the UI).
 --     Then run this block.
 --
---  ⚠ PLUS-ADDRESSING, ON PURPOSE. `mahen@gmail.com` and friends are almost
---     certainly real strangers' mailboxes: password-reset mail would go to them,
---     and they could take the account over. `josiahsoh+mahen@gmail.com` lands in
---     YOUR inbox, is a distinct Supabase user, and nobody else can ever receive
---     its mail. Change the base address below if you use a different one.
--- ===========================================================================
---  ⚠ THE ADMIN IS NOT IN THIS LIST, AND MUST NOT BE.
---     josiahsoh@gmail.com stays 'admin'. Note that `josiah@gmail.com` and
---     `josiahsoh+josiah@gmail.com` are BOTH different users from it — the local
---     part differs — so neither can touch the admin account. Four testers, one
---     admin, and the two never overlap.
+--  ⚠ WHY @example.com AND NOT @gmail.com.
+--     There is no such thing as a fake Gmail. gmail.com is a real domain, and a
+--     short address like `mahen@gmail.com` has belonged to a real person for
+--     years — password-reset mail would land in THEIR inbox, and they could take
+--     the tester account over.
 --
---  Both forms are listed because the accounts may have been registered either
---  way. An `in (...)` list that matches nothing updates zero rows and reports no
---  error, which is exactly how the first run appeared to succeed and did nothing.
+--     example.com is reserved by IANA for exactly this purpose. It has no
+--     mailboxes, it never will, and no human can ever receive or reset anything
+--     sent to it. That is a genuinely fake address, which is what a throwaway
+--     test account actually wants.
+--
+--  ⚠ "Confirm email" MUST BE OFF (Supabase → Authentication → Providers).
+--     Nothing can deliver to example.com, so a confirmation mail would never
+--     arrive and the account could never be activated.
+--
+--  ⚠ THE ADMIN IS NOT IN THIS LIST, AND MUST NOT BE.
+--     josiahsoh@gmail.com stays 'admin'. `josiah@example.com` is a completely
+--     different user, so promoting it cannot touch the admin account. Five
+--     testers, one admin, and the two never overlap.
+--
+--  An `in (...)` list that matches nothing updates zero rows and reports NO
+--  error — which is exactly how the first run appeared to succeed and did
+--  nothing. Trust the select at the bottom, not the absence of a complaint.
 update public.profiles p
    set role = 'tester'
   from auth.users u
  where u.id = p.id
    and lower(u.email) in (
-     -- as registered
-     'mahen@gmail.com',
-     'alum@gmail.com',
-     'azrena@gmail.com',
-     'josiah@gmail.com',
-     -- plus-addressed (safer: the mail lands in an inbox you control)
-     'josiahsoh+mahen@gmail.com',
-     'josiahsoh+alum@gmail.com',
-     'josiahsoh+azrena@gmail.com',
-     'josiahsoh+josiah@gmail.com'
+     'mahen@example.com',
+     'alum@example.com',
+     'azrena@example.com',
+     'josiah@example.com',
+     'syahrul@example.com'
    );
 
--- Check it took. Expect four testers and one admin, and no overlap.
+-- Check it took. Expect five testers and one admin, and no overlap.
 select u.email, p.role
   from public.profiles p
   join auth.users u on u.id = p.id
