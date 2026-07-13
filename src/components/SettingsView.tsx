@@ -8,6 +8,7 @@ import {
   loadActiveInvite,
   loadCoGuardians,
   loadMaintenance,
+  resetTesterData,
   setMaintenance,
   type CoGuardian,
 } from "@/lib/db"
@@ -32,6 +33,7 @@ import {
   Copy,
   Eye,
   EyeOff,
+  FlaskConical,
   Globe,
   Lock,
   Share2,
@@ -174,6 +176,14 @@ const STR = {
     shareDesc:
       "Jemput pasangan anda untuk menjaga anak yang sama. Kemajuan dikongsi bersama — sesiapa sahaja boleh melakukan aktiviti.",
     sharedWith: "Dikongsi dengan",
+    testerTitle: "Mod Penguji",
+    testerDesc:
+      "Anda adalah penguji pilot. Butang ini memadam SEMUA data anda — anak, jawapan onboarding, dan semua kemajuan 14 hari — supaya anda boleh mula semula dari awal. Log masuk anda kekal.",
+    testerBtn: "Padam data saya & mula semula",
+    testerConfirm:
+      "Padam semua data anda? Anak, jawapan onboarding dan semua kemajuan akan hilang. Log masuk anda kekal. Tindakan ini TIDAK boleh dibatalkan.",
+    testerDone: "Data dipadam. Memuat semula…",
+    testerFail: "Gagal memadam. Cuba lagi.",
     roleOwner: "Pemilik",
     roleParent: "Pasangan",
     generateCode: "Jana Kod Jemputan",
@@ -279,6 +289,14 @@ const STR = {
     shareDesc:
       "Invite your partner to care for the same child. Progress is shared — either of you can do the activities.",
     sharedWith: "Shared with",
+    testerTitle: "Tester mode",
+    testerDesc:
+      "You are a pilot tester. This deletes ALL your data — your child, your onboarding answers, and every day of 14-day progress — so you can start over from scratch. Your login stays.",
+    testerBtn: "Delete my data & start over",
+    testerConfirm:
+      "Delete all your data? Your child, onboarding answers and all progress will be gone. Your login stays. This CANNOT be undone.",
+    testerDone: "Data deleted. Reloading…",
+    testerFail: "Delete failed. Try again.",
     roleOwner: "Owner",
     roleParent: "Partner",
     generateCode: "Generate Invite Code",
@@ -340,6 +358,7 @@ function passwordValid(p: string): boolean {
 
 export default function SettingsView({
   isAdmin = false,
+  isTester = false,
   stage = 1,
   profiledAt,
   onStageChange,
@@ -350,6 +369,8 @@ export default function SettingsView({
 }: {
   /** Admins get a trimmed Settings (language / theme / password only). */
   isAdmin?: boolean
+  /** Pilot testers get a self-service data wipe so they can re-run onboarding. */
+  isTester?: boolean
   /** Child's current communication stage (1–5). */
   stage?: number
   /** ISO date the child was profiled at sign-up. */
@@ -430,6 +451,7 @@ export default function SettingsView({
 
   // Maintenance mode (admin only) — toggled optimistically, reverts on failure.
   const [maintenanceOn, setMaintenanceOn] = useState(false)
+  const [resetting, setResetting] = useState(false)
   useEffect(() => {
     if (isAdmin) loadMaintenance().then(setMaintenanceOn)
   }, [isAdmin])
@@ -568,6 +590,41 @@ export default function SettingsView({
     <>
     <div className="h-full overflow-y-auto px-4 pb-28 pt-5 md:px-8 md:pt-6">
       <div className="mx-auto max-w-2xl space-y-6">
+        {/* TESTER — a self-service wipe so a pilot tester can re-run the whole
+            journey without an admin deleting their auth user each time.
+
+            The button is gated on the role, but so is the RPC behind it: the
+            database refuses `reset_my_test_data()` for anyone who is not a
+            tester. Hiding a button only hides a button. */}
+        {isTester && (
+          <Section icon={FlaskConical} title={s.testerTitle}>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              {s.testerDesc}
+            </p>
+            <button
+              type="button"
+              disabled={resetting}
+              onClick={async () => {
+                if (!window.confirm(s.testerConfirm)) return
+                setResetting(true)
+                const res = await resetTesterData()
+                if (!res.ok) {
+                  setResetting(false)
+                  window.alert(s.testerFail)
+                  return
+                }
+                // Hard reload: the whole app is holding the old family in state,
+                // and reconstructing that by hand is how you end up "reset" with
+                // a stale childId still in memory.
+                window.location.reload()
+              }}
+              className="w-full rounded-2xl border-[1.5px] border-destructive/40 bg-destructive/5 px-4 py-3 text-sm font-semibold text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50"
+            >
+              {resetting ? s.testerDone : s.testerBtn}
+            </button>
+          </Section>
+        )}
+
         {/* Maintenance mode — admin only */}
         {isAdmin && (
           <Section icon={Wrench} title={s.maintenanceTitle}>

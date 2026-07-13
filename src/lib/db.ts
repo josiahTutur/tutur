@@ -644,3 +644,26 @@ export async function loadAdminData(): Promise<AdminData | null> {
     feedback: (feedbackRes.data as AdminFeedbackRow[]) ?? [],
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/*  TESTER — self-service data reset (migration 0020)                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Wipe the caller's own family and start clean, keeping the login.
+ *
+ * The authority is the DATABASE, not this function: `reset_my_test_data()` raises
+ * unless the caller's role is 'tester'. Hiding a button only hides a button — the
+ * RPC would still be callable — so the refusal lives where it cannot be bypassed.
+ *
+ * IRREVERSIBLE. The child and every day, tracker, reflection and vault row that
+ * hangs off it are gone.
+ */
+export async function resetTesterData(): Promise<{ ok: boolean; message?: string }> {
+  const { error } = await supabase.rpc("reset_my_test_data")
+  if (error) {
+    console.error("[resetTesterData] failed:", error)
+    return { ok: false, message: error.message }
+  }
+  return { ok: true }
+}

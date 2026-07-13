@@ -526,6 +526,9 @@ export default function DashboardHub({
   const [activeNav, setActiveNav] = useState<NavId>("aktiviti")
   const [menuOpen, setMenuOpen] = useState(false) // mobile drawer
   const [isAdmin, setIsAdmin] = useState(false) // gates the Wawasan dashboard
+  // A tester is otherwise EXACTLY a guardian — same screens, same RLS. The role
+  // unlocks one thing: a self-service data wipe in Settings.
+  const [isTester, setIsTester] = useState(false)
   const [roleLoaded, setRoleLoaded] = useState(false) // avoid a parent-view flash
 
   // Resolve the signed-in user's role. Admins get the admin cockpit and land on
@@ -534,6 +537,7 @@ export default function DashboardHub({
     loadUserRole().then((role) => {
       const admin = role === "admin"
       setIsAdmin(admin)
+      setIsTester(role === "tester")
       if (admin) setActiveNav("wawasan")
       setRoleLoaded(true)
     })
@@ -737,6 +741,7 @@ export default function DashboardHub({
           <ViewLayer visible={activeNav === "setting"}>
             <SettingsView
               isAdmin={isAdmin}
+              isTester={isTester}
               stage={profile?.stage}
               profiledAt={profile?.profiledAt}
               onStageChange={updateStage}
