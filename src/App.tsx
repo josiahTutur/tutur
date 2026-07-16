@@ -25,6 +25,7 @@ import { clearChatProgress } from "@/components/Chat"
 import DashboardHub from "@/components/DashboardHub"
 import AccountDeleted from "@/components/AccountDeleted"
 import { PilotPreview } from "@/components/preverb/PilotPreview"
+import { TuturDemo } from "@/components/demo/TuturDemo"
 import {
   OnboardingFlow,
   type OnboardingResult,
@@ -80,6 +81,21 @@ function readInviteCodeFromUrl(): string | null {
   }
 }
 
+/**
+ * `?demo=1` → the PRD v1.0 clickable prototype.
+ *
+ * Entirely self-contained: its own palette, its own components, no backend, no
+ * auth, no storage. It shares nothing with the live app but the bundler, so it
+ * cannot break anything — and it can be handed to a parent as-is.
+ */
+function readDemo(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).has("demo")
+  } catch {
+    return false
+  }
+}
+
 /** `?pilot=1` → render the 14-day day-player skeleton instead of the live app. */
 function readPilotPreview(): boolean {
   try {
@@ -116,6 +132,8 @@ export default function App() {
   const [oauthError] = useState<boolean>(readOAuthError)
   // `?pilot=1` — the day-player skeleton. Read once; see the render guard below.
   const [pilotPreview] = useState<boolean>(readPilotPreview)
+  // `?demo=1` — the PRD prototype.
+  const [demo] = useState<boolean>(readDemo)
 
   // Runtime maintenance flag (admin-toggled) — OR'd with the build-time env flag.
   const [remoteMaintenance, setRemoteMaintenance] = useState(false)
@@ -342,6 +360,8 @@ export default function App() {
   //
   // Remove this block once the day player replaces the current daily loop for
   // real — see docs/PILOT_EXECUTION_PLAN.md, Phase 4.
+  if (demo) return <TuturDemo />
+
   if (pilotPreview) return <PilotPreview />
 
   // Splash while the session check runs, so a signed-in user never sees a flash

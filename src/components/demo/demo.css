@@ -1,0 +1,270 @@
+/* ========================================================================== *
+ *  Tutur Demo — design system, on TUTUR'S OWN PALETTE.
+ *
+ *  The PRD specified a green/cream scheme (#6BBF7A on #FDFBF7). That was a
+ *  reasonable hypothesis, but Tutur already has a brand and this film is shown
+ *  to prospective subscribers — so it must look like the app they would be
+ *  buying, not a different product.
+ *
+ *  Every value below is lifted from src/index.css, so the demo cannot drift
+ *  away from the real thing:
+ *
+ *      --primary   259 80% 55%   Tutur Violet   #6A2FE8
+ *      --bg        250 100% 99%  surface-app    #FBFAFF   (violet-tinted white)
+ *      --text      252 29% 12%   ink            #191628
+ *      --grey      246 15% 60%   mist           #8B88A8
+ *      --border    252 30% 92%   line           #E6E3F2
+ *      --ring      257 100% 68%  violet-400     #8B5CFF
+ *
+ *  What the PRD's palette was BUYING, though, was warmth — a green-and-cream app
+ *  feels like Headspace, not like hospital software, and that instinct is right.
+ *  So the warmth is kept, but carried by the two accents rather than the base:
+ *  a soft violet-cream for the mission card, and coral for capture/celebration.
+ *  Violet stays the voice of the product; the warmth is what it says.
+ *
+ *  Scoped under `.tutur-demo` so none of this can leak into the real app.
+ * ========================================================================== */
+
+.tutur-demo {
+  /* ── Straight from the app ─────────────────────────────────────────────── */
+  --bg: #fbfaff;          /* surface-app */
+  --primary: #6a2fe8;     /* Tutur Violet */
+  --primary-dark: #5a25c8;
+  --primary-light: #8b5cff; /* violet-400 — the ring */
+  --text: #191628;        /* ink */
+  --grey: #8b88a8;        /* mist */
+  --border: #e6e3f2;      /* line */
+
+  /* ── The warmth the PRD was really asking for ──────────────────────────── */
+  /* A violet-cream, not a yellow: it belongs to the brand and still reads warm. */
+  --secondary: #f3ecff;
+  /* Coral. Reserved for the two moments that are about FEELING rather than
+     instruction — the memory capture, and the celebration. */
+  --accent: #ff8a65;
+  --success: #6a2fe8;
+
+  /* Violet-tinted shadows. A neutral black shadow under a violet card reads as
+     grey and instantly makes the whole thing look like software. */
+  --shadow: 0 20px 40px rgba(25, 22, 40, 0.08);
+  --shadow-sm: 0 8px 20px rgba(25, 22, 40, 0.05);
+
+  font-family:
+    Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Screen transition: slide up + fade, 350ms (PRD) ────────────────────── */
+@keyframes demo-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.demo-screen {
+  animation: demo-slide-up 350ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes demo-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.demo-fade {
+  animation: demo-fade-in 500ms ease both;
+}
+
+/* Stagger helper — cards arrive one after another rather than as a slab. */
+.demo-stagger > * {
+  animation: demo-slide-up 400ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.demo-stagger > *:nth-child(1) { animation-delay: 40ms; }
+.demo-stagger > *:nth-child(2) { animation-delay: 110ms; }
+.demo-stagger > *:nth-child(3) { animation-delay: 180ms; }
+.demo-stagger > *:nth-child(4) { animation-delay: 250ms; }
+.demo-stagger > *:nth-child(5) { animation-delay: 320ms; }
+
+/* ── Buttons press, they don't just change colour ───────────────────────── */
+.demo-press {
+  transition:
+    transform 120ms ease,
+    filter 120ms ease;
+}
+.demo-press:active {
+  transform: scale(0.97);
+}
+
+/* ── Progress bars grow in ─────────────────────────────────────────────── */
+@keyframes demo-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.demo-grow {
+  transform-origin: left;
+  animation: demo-grow 800ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ── Breathing ring on the splash + play screen ─────────────────────────── */
+@keyframes demo-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.25;
+  }
+}
+.demo-breathe {
+  animation: demo-breathe 3.6s ease-in-out infinite;
+}
+
+/* ── Confetti (800ms, PRD) ─────────────────────────────────────────────── */
+@keyframes demo-confetti {
+  0% {
+    opacity: 1;
+    transform: translateY(-10vh) rotate(0deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(70vh) rotate(540deg);
+  }
+}
+.demo-confetti-piece {
+  position: absolute;
+  width: 9px;
+  height: 14px;
+  border-radius: 2px;
+  animation: demo-confetti 1600ms ease-in forwards;
+}
+
+/* ── Recording pulse ───────────────────────────────────────────────────── */
+@keyframes demo-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 138, 101, 0.5);
+  }
+  50% {
+    transform: scale(1.04);
+    box-shadow: 0 0 0 18px rgba(255, 138, 101, 0);
+  }
+}
+.demo-pulse {
+  animation: demo-pulse 1.6s ease-out infinite;
+}
+
+/* Nothing in the demo may scroll the page — screens fit, or their body scrolls. */
+.tutur-demo * {
+  box-sizing: border-box;
+}
+
+/* ========================================================================== *
+ *  V2 — the story. Time-skips, timelines, and the ending film.
+ * ========================================================================== */
+
+/* Ken Burns — Apple Photos drift for the montage. */
+@keyframes demo-ken-burns {
+  from {
+    transform: scale(1) translate(0, 0);
+  }
+  to {
+    transform: scale(1.12) translate(-2%, -2%);
+  }
+}
+.demo-ken {
+  animation: demo-ken-burns 4.5s ease-out both;
+}
+
+/* Timeline items slide in from the left, one after another. */
+@keyframes demo-slide-left {
+  from {
+    opacity: 0;
+    transform: translateX(-22px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.demo-timeline > * {
+  animation: demo-slide-left 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.demo-timeline > *:nth-child(1) { animation-delay: 80ms; }
+.demo-timeline > *:nth-child(2) { animation-delay: 240ms; }
+.demo-timeline > *:nth-child(3) { animation-delay: 400ms; }
+.demo-timeline > *:nth-child(4) { animation-delay: 560ms; }
+.demo-timeline > *:nth-child(5) { animation-delay: 720ms; }
+.demo-timeline > *:nth-child(6) { animation-delay: 880ms; }
+
+/* Memory cards scale in. */
+@keyframes demo-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.demo-scale > * {
+  animation: demo-scale-in 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.demo-scale > *:nth-child(1) { animation-delay: 60ms; }
+.demo-scale > *:nth-child(2) { animation-delay: 180ms; }
+.demo-scale > *:nth-child(3) { animation-delay: 300ms; }
+.demo-scale > *:nth-child(4) { animation-delay: 420ms; }
+.demo-scale > *:nth-child(5) { animation-delay: 540ms; }
+
+/* The time-skip. A slow, quiet breath between chapters. */
+@keyframes demo-skip {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+  25%,
+  75% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-8px) scale(1.02);
+  }
+}
+.demo-skip {
+  animation: demo-skip 2600ms ease-in-out both;
+}
+
+@keyframes demo-leaf {
+  0% { transform: translateY(0) rotate(0deg); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translateY(-42px) rotate(16deg); opacity: 0; }
+}
+.demo-leaf {
+  animation: demo-leaf 2.4s ease-out infinite;
+}
+
+/* The ending. Black, and slow. */
+@keyframes demo-film-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.demo-film-1 { animation: demo-film-in 900ms ease 200ms both; }
+.demo-film-2 { animation: demo-film-in 900ms ease 1300ms both; }
+.demo-film-3 { animation: demo-film-in 900ms ease 2400ms both; }
+.demo-film-4 { animation: demo-film-in 1200ms ease 3600ms both; }
